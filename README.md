@@ -24,3 +24,6 @@ In the above command, you should replace `<domain>` with the domain that your se
 You can also replace `<install_path>` with the path that you want this script store its files there. (default: $HOME/reality)
 
 After first run, a file named `config` will be created that stores all of your configuration.
+
+## Output
+![image](https://user-images.githubusercontent.com/39186039/232563871-0140e10a-22b4-4653-9bc9-cdba519a8b41.png)
