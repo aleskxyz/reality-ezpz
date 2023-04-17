@@ -6,13 +6,13 @@ This script:
 * Generates docker-compose.yml and reality (xray) configuration
 * Generates client configuration string and QRcode
 
-## Quick start:
-Innstall everything with a single commmad with default config:
+## Quick start
+Install everything with a single commmad with default config:
 ```
 curl -sL https://bit.ly/realityez|bash
 ```
 
-## Custom Installation:
+## Custom Installation
 ```
 mkdir reality
 cd reality
