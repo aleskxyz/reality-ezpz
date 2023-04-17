@@ -19,7 +19,7 @@ if [[ ! -e "${path}/config" ]]; then
 key_pair=$(sudo docker run -q --rm teddysun/xray:1.8.0 xray x25519)
 cat >"${path}/config" <<EOF
 domain=${domain}
-server=$(curl -s ifconfig.me)
+server=$(curl -s ifconfig.io)
 uuid=$(cat /proc/sys/kernel/random/uuid)
 public_key=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
 private_key=$(echo "${key_pair}"|grep -oP '(?<=Private key: ).*')
