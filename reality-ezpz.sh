@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e
-default_domain=yandex.com
-default_path="${HOME}/reality"
-domain="${1:-$default_domain}"
-path="${2:-$default_path}"
+
+domain=yandex.com
+path="${HOME}/reality"
+image="teddysun/xray:1.8.0"
+
 if ! command -v qrencode > /dev/null 2>&1; then
   echo "Updating repositories ..."
   sudo apt update
@@ -14,9 +15,12 @@ if ! command -v docker > /dev/null 2>&1; then
   echo "Installing docker ..."
   curl -fsSL https://get.docker.com | sudo bash
 fi
+if [[ $1 == 'regenerate' ]]; then
+  rm -rf "${path}"
+fi
 mkdir -p "${path}"
 if [[ ! -e "${path}/config" ]]; then
-key_pair=$(sudo docker run -q --rm teddysun/xray:1.8.0 xray x25519)
+key_pair=$(sudo docker run -q --rm ${image} xray x25519)
 cat >"${path}/config" <<EOF
 domain=${domain}
 server=$(curl -s ifconfig.io)
@@ -33,7 +37,7 @@ cat >"${path}/docker-compose.yml" <<EOF
 version: "3"
 services:
   xray:
-    image: teddysun/xray:1.8.0
+    image: ${image}
     ports:
     - 80:8080
     - 443:8443

@@ -6,24 +6,23 @@ This script:
 * Generates docker-compose.yml and reality (xray) configuration
 * Generates client configuration string and QRcode
 
-## Quick start
-Install everything with a single commmad with default config:
-```
-curl -sL https://bit.ly/realityez|bash
-```
+This script is designed for Ubuntu and Debian.
 
-## Custom Installation
+## Installation
+Copy and pase the line below in terminal:
 ```
-mkdir reality
-cd reality
-curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/reality-ezpz.sh -o reality-ezpz.sh
-sudo bash reality-ezpz.sh <domain> <install_path>
+bash <(curl -sL https://bit.ly/realityez)
 ```
-In the above command, you should replace `<domain>` with the domain that your server pretends to host. (default: yandex.com)
-
-You can also replace `<install_path>` with the path that you want this script store its files there. (default: $HOME/reality)
-
-After first run, a file named `config` will be created that stores all of your configuration.
-
-## Output
+After a while you will get confgiuration string and QR code:
 ![image](https://user-images.githubusercontent.com/39186039/232563871-0140e10a-22b4-4653-9bc9-cdba519a8b41.png)
+
+## Generate new configuration
+If you want to remove old configuration and generate new configuration, copy and pase this line:
+```
+bash <(curl -sL https://bit.ly/realityez) regenerate
+```
+
+## Customization
+This script stores configurations in `$HOME/reality` and uses the TLS of `yandex.com`
+
+You can edit these defaults by downloading the script in your server and edit first lines.
