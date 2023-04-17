@@ -6,15 +6,21 @@ This script:
 * Generates docker-compose.yml and reality (xray) configuration
 * Generates client configuration string and QRcode
 
-Installation:
+## Quick start:
+Innstall everything with a single commmad with default config:
+```
+curl -sL https://bit.ly/realityez|bash
+```
+
+## Custom Installation:
 ```
 mkdir reality
 cd reality
 curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/reality-ezpz.sh -o reality-ezpz.sh
-sudo bash reality-ezpz.sh <domain>
+sudo bash reality-ezpz.sh <domain> <install_path>
 ```
-In the above command, you should replace `<domain>` with the domain that your server pretends to host.
+In the above command, you should replace `<domain>` with the domain that your server pretends to host. (default: yandex.com)
+
+You can also replace `<install_path>` with the path that you want this script store its files there. (default: $HOME/reality)
 
 After first run, a file named `config` will be created that stores all of your configuration.
-
-In subsequent execution of `reality-ezpz.sh` you don't need to specify `<domain>`

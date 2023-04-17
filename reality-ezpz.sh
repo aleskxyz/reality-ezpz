@@ -1,26 +1,24 @@
 #!/bin/bash
-if [ "$EUID" -ne 0 ]
-  then echo "Run as root"
-  exit
-fi
+set -e
+default_domain=yandex.com
+default_path="${HOME}/reality"
+domain="${1:-$default_domain}"
+path="${2:-$default_path}"
 if ! command -v qrencode > /dev/null 2>&1; then
-  echo "Updating repsitories ..."
-  apt update -qq > /dev/null 2>&1
+  echo "Updating repositories ..."
+  sudo apt update
   echo "Installing qrencode ..."
-  apt install qrencode -y -qq > /dev/null 2>&1
+  sudo apt install qrencode -y
 fi
 if ! command -v docker > /dev/null 2>&1; then
   echo "Installing docker ..."
-  curl -fsSL https://get.docker.com | bash > /dev/null 2>&1
+  curl -fsSL https://get.docker.com | sudo bash
 fi
-if [[ ! -e 'config' ]]; then
-  if [[ $# -eq 0 ]]; then
-    echo "domain is mandatory for the first run"
-    exit 1
-  fi
-key_pair=$(docker run -q --rm teddysun/xray:1.8.0 xray x25519)
-cat >config <<EOF
-domain=$1
+mkdir -p "${path}"
+if [[ ! -e "${path}/config" ]]; then
+key_pair=$(sudo docker run -q --rm teddysun/xray:1.8.0 xray x25519)
+cat >"${path}/config" <<EOF
+domain=${domain}
 server=$(curl -s ifconfig.me)
 uuid=$(cat /proc/sys/kernel/random/uuid)
 public_key=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
@@ -29,9 +27,9 @@ short_id=$(openssl rand -hex 8)
 EOF
 fi
 
-. config
+. "${path}/config"
 
-cat >docker-compose.yml <<EOF
+cat >"${path}/docker-compose.yml" <<EOF
 version: "3"
 services:
   xray:
@@ -46,7 +44,7 @@ services:
     - ./xray.conf:/etc/xray/config.json
 EOF
 
-cat >xray.conf <<EOF
+cat >"${path}/xray.conf" <<EOF
 {
   "log": {
     "loglevel": "warning"
@@ -165,11 +163,12 @@ cat >xray.conf <<EOF
 }
 EOF
 
-docker compose down
-docker compose up -d
+sudo docker compose --project-directory "${path}" down
+sudo docker compose --project-directory "${path}" up -d
 
 config="vless://${uuid}@${server}:443?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${public_key}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${domain}&sid=${short_id}#reality"
 echo ""
+echo "=================================================="
 echo "Client configuration:"
 echo ""
 echo "$config"
