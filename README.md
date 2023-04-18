@@ -38,37 +38,37 @@ Default SNI domain is `www.google.com`.
 
 You can change it by using `--domain` or `-d` options:
 ```
-bash <(curl -sL https://bit.ly/realityez) -d yahoo.com
+bash <(curl -sL https://bit.ly/realityez) - -d yahoo.com
 ```
 ### Change transport protocol
 Default transport protocol is `tcp`.
 
 You can change it by using `--trans` or `-t` options:
 ```
-bash <(curl -sL https://bit.ly/realityez) -t h2
+bash <(curl -sL https://bit.ly/realityez) - -t h2
 ```
 Valid options are `tcp`,`h2` and `grpc`.
 ### Block malware and adult contents
 You can block malware and adult contents by using `--safenet` or `-s` options:
 ```
-bash <(curl -sL https://bit.ly/realityez) -s
+bash <(curl -sL https://bit.ly/realityez) - -s
 ```
 ### Regenerate configuration and keys
 You can regenerate all the configuration and keys by using `--regenerate` or `-r` options:
 ```
-bash <(curl -sL https://bit.ly/realityez) -r
+bash <(curl -sL https://bit.ly/realityez) - -r
 ```
 ### Uninstall
 You can delete configuration and services by using `--uninstall` or `-u` options:
 ```
-bash <(curl -sL https://bit.ly/realityez) -u
+bash <(curl -sL https://bit.ly/realityez) - -u
 ```
 ### Change configuration path
 Default configuration path is `$HOME/reality`.
 
 You can change it by using `--path` or `-p` options:
 ```
-bash <(curl -sL https://bit.ly/realityez) -p /opt/reality
+bash <(curl -sL https://bit.ly/realityez) - -p /opt/reality
 ```
 The path should be absolute path.
 
@@ -83,5 +83,5 @@ We want to create a reality account that:
 
 So we need to execute this command:
 ```
-bash <(curl -sL https://bit.ly/realityez) -t grpc -d www.wikipedia.com -p /opt/xray -s
+bash <(curl -sL https://bit.ly/realityez) - -t grpc -d www.wikipedia.com -p /opt/xray -s
 ```
