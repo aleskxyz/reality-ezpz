@@ -18,7 +18,7 @@ After a while you will get confgiuration string and QR code:
 
 If the command above doesn't work, use this one instead:
 ```
-bash <(curl -sL https://github.com/aleskxyz/reality-ezpz/blob/master/reality-ezpz.sh)
+bash <(curl -sL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/reality-ezpz.sh)
 ```
 
 ## Generate new configuration
