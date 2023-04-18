@@ -16,6 +16,11 @@ bash <(curl -sL https://bit.ly/realityez)
 After a while you will get confgiuration string and QR code:
 ![image](https://user-images.githubusercontent.com/39186039/232563871-0140e10a-22b4-4653-9bc9-cdba519a8b41.png)
 
+If the command above doesn't work, use this one instead:
+```
+bash <(curl -sL https://github.com/aleskxyz/reality-ezpz/blob/master/reality-ezpz.sh)
+```
+
 ## Generate new configuration
 If you want to remove old configuration and generate new configuration, copy and pase this line:
 ```
