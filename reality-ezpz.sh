@@ -281,7 +281,7 @@ EOF
 sudo docker compose --project-directory "${path}" down
 sudo docker compose --project-directory "${path}" up -d
 
-config="vless://${uuid}@${server}:443?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${public_key}&headerType=none&fp=chrome&type=${trans}&flow=$([[ $trans == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${domain}&sid=${short_id}$([[ $trans == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#Reality EZPZ"
+config="vless://${uuid}@${server}:443?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${public_key}&headerType=none&fp=chrome&type=${trans}&flow=$([[ $trans == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${domain}&sid=${short_id}$([[ $trans == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
 echo ""
 echo "=================================================="
 echo "Client configuration:"
@@ -290,4 +290,4 @@ echo "$config"
 echo ""
 echo "Or you can scan the QR code:"
 echo ""
-qrencode -t ansiutf8 $config
+qrencode -t ansiutf8 "${config}"
