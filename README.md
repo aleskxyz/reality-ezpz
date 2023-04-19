@@ -14,7 +14,16 @@ Features:
 * You can change transport protocol
 * You can block malware and adult contents
 
-This script is designed for Ubuntu and Debian.
+Supported OS:
+* Ubuntu 22.04
+* Ubuntu 20.04
+* Ubuntu 18.04
+* Debian 11
+* Debian 10
+* CentOS Stream 9
+* CentOS Stream 8
+* CentOS 7
+* Fedora 37
 
 ## Quick Start
 You can start using this script with default configuration by copy and paste the line below in terminal:

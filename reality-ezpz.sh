@@ -126,14 +126,21 @@ fi
 server=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
 
 if ! command -v qrencode > /dev/null 2>&1; then
-  echo "Updating repositories ..."
-  sudo apt update
-  echo "Installing qrencode ..."
-  sudo apt install qrencode -y
+  if command -v apt > /dev/null 2>&1; then
+    sudo apt update
+    sudo apt install qrencode -y
+  elif command -v yum > /dev/null 2>&1; then
+    sudo yum makecache
+    sudo yum install epel-release -y || true
+    sudo yum install qrencode -y
+  else
+    echo "OS is not supported!"
+    exit 1
+  fi
 fi
 if ! command -v docker > /dev/null 2>&1; then
-  echo "Installing docker ..."
   curl -fsSL https://get.docker.com | sudo bash
+  systemctl enable --now docker
 fi
 
 mkdir -p "${path}"
