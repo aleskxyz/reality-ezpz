@@ -71,7 +71,15 @@ You can change it by using `--path` or `-p` options:
 bash <(curl -sL https://bit.ly/realityez) -p /opt/reality
 ```
 The path should be absolute path.
+### Change port
+Notice: Do not change default port. This may block your IP!
 
+Default port is `443`.
+
+You can change it by using `--port` option:
+```
+bash <(curl -sL https://bit.ly/realityez) --port 8443
+```
 ## Example
 You can combine different options together.
 

@@ -8,17 +8,19 @@ regenerate=false
 uninstall=false
 path="$HOME/reality"
 safenet=false
+port=443
 image="teddysun/xray:1.8.0"
 
 # Function to display help information
 function show_help {
-  echo "Usage: $0 [-t|--trans=h2|grpc|tcp] [-d|--domain=<domain>] [-r|--regenerate] [-p|--path=<path>] [-u|--uninstall]"
+  echo "Usage: $0 [-t|--trans=h2|grpc|tcp] [-d|--domain=<domain>] [-r|--regenerate] [-p|--path=<path>] [--port=<port>] [-u|--uninstall]"
   echo "  -t, --trans         Transport protocol to use (default: tcp)"
   echo "  -d, --domain        Domain to use (default: www.google.com)"
   echo "  -r, --regenerate    Regenerate configuration (default: false)"
   echo "  -u, --uninstall     Uninstall reality (default: false)"
   echo "  -p, --path          Absolute path to configuration directory (default: $HOME/reality)"
   echo "  -s, --safenet       Block malware and adult content (default: false)"
+  echo "      --port          Server port !!Do not change it!! (default: 443)"
   echo "  -h, --help          Display this help message"
 }
 
@@ -29,7 +31,7 @@ domain_regex="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
 path_regex="^/.*"
 
 # Parse arguments
-opts=$(getopt -o t:d:rup:sh --long trans:,domain:,regenerate,uninstall,path:,safenet,help -- "$@")
+opts=$(getopt -o t:d:rup:sh --long trans:,domain:,regenerate,uninstall,path:,safenet,port:,help -- "$@")
 if [ $? -ne 0 ]; then
   show_help
   exit 1
@@ -79,6 +81,19 @@ while true; do
     -s|--safenet)
     safenet=true
     shift
+    ;;
+    --port)
+    port="$2"
+    if ! [[ $port =~ ^[0-9]+$ ]]; then
+      echo "Invalid port number: $port"
+      show_help
+      exit 1
+    elif ((port < 1 || port > 65535)); then
+      echo "Port number out of range: $port"
+      show_help
+      exit 1
+    fi
+    shift 2
     ;;
     -h|--help)
     show_help
@@ -140,8 +155,8 @@ services:
   xray:
     image: ${image}
     ports:
-    - 80:8080
-    - 443:8443
+    $([[ $port -eq 443 ]] && echo '- 80:8080' || true)
+    - ${port}:8443
     restart: always
     environment:
     - "TZ=Etc/UTC"
@@ -239,6 +254,7 @@ cat >"${path}/xray.conf" <<EOF
           "fc00::/7",
           "fe80::/10",
           "geoip:private",
+          "geoip:cn",
           "geoip:ir"
         ],
         "outboundTag": "block"
@@ -281,7 +297,7 @@ EOF
 sudo docker compose --project-directory "${path}" down
 sudo docker compose --project-directory "${path}" up -d
 
-config="vless://${uuid}@${server}:443?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${public_key}&headerType=none&fp=chrome&type=${trans}&flow=$([[ $trans == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${domain}&sid=${short_id}$([[ $trans == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
+config="vless://${uuid}@${server}:${port}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${public_key}&headerType=none&fp=chrome&type=${trans}&flow=$([[ $trans == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${domain}&sid=${short_id}$([[ $trans == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
 echo ""
 echo "=================================================="
 echo "Client configuration:"
