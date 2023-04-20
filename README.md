@@ -74,7 +74,7 @@ It seems that natvps.net servers have some dns configuration problems and the `c
 
 You can solve these problems by running this command:
 ```
-grep -q "^DNS=8.8.8.8$" /etc/systemd/resolved.conf || echo "DNS=8.8.8.8" >> /etc/systemd/resolved.conf && systemctl restart systemd-resolved && apt update && apt install curl -y
+grep -q "^DNS=1.1.1.1$" /etc/systemd/resolved.conf || echo "DNS=1.1.1.1" >> /etc/systemd/resolved.conf && systemctl restart systemd-resolved && apt update && apt install curl -y
 ```
 ### Regenerate configuration and keys
 You can regenerate all the configuration and keys by using `--regenerate` or `-r` options:
