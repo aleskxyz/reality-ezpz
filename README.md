@@ -69,6 +69,13 @@ By using `--natvps` option you can use this script on natvps.net servers:
 bash <(curl -sL https://bit.ly/realityez) --natvps
 ```
 This script will find first available port automatically so you don't need to use `--port` option while using it.
+
+It seems that natvps.net servers have some dns configuration problems and the `curl` package is not installed in them by default.
+
+You can solve these problems by running this command:
+```
+grep -q "^DNS=8.8.8.8$" /etc/systemd/resolved.conf || echo "DNS=8.8.8.8" >> /etc/systemd/resolved.conf && systemctl restart systemd-resolved && apt update && apt install curl -y
+```
 ### Regenerate configuration and keys
 You can regenerate all the configuration and keys by using `--regenerate` or `-r` options:
 ```
