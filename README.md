@@ -13,6 +13,7 @@ Features:
 * You can change SNI domain
 * You can change transport protocol
 * You can block malware and adult contents
+* Supports natvps.net servers
 
 Supported OS:
 * Ubuntu 22.04
@@ -62,6 +63,12 @@ You can block malware and adult contents by using `--safenet` or `-s` options:
 ```
 bash <(curl -sL https://bit.ly/realityez) -s
 ```
+### Installing on natvps.net servers
+By using `--natvps` option you can use this script on natvps.net servers:
+```
+bash <(curl -sL https://bit.ly/realityez) --natvps
+```
+This script will find first available port automatically so you don't need to use `--port` option while using it.
 ### Regenerate configuration and keys
 You can regenerate all the configuration and keys by using `--regenerate` or `-r` options:
 ```

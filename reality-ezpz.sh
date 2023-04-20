@@ -28,11 +28,12 @@ path="$HOME/reality"
 safenet=false
 port=443
 image="teddysun/xray:1.8.0"
+natvps=false
 server=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
 
 # Function to display help information
 function show_help {
-  echo "Usage: $0 [-t|--trans=h2|grpc|tcp] [-d|--domain=<domain>] [-r|--regenerate] [-p|--path=<path>] [--port=<port>] [-u|--uninstall]"
+  echo "Usage: $0 [-t|--trans=h2|grpc|tcp] [-d|--domain=<domain>] [-r|--regenerate] [-p|--path=<path>] [--port=<port>] [--natvps] [-u|--uninstall]"
   echo "  -t, --trans         Transport protocol to use (default: tcp)"
   echo "  -d, --domain        Domain to use (default: www.google.com)"
   echo "  -r, --regenerate    Regenerate configuration (default: false)"
@@ -40,6 +41,7 @@ function show_help {
   echo "  -p, --path          Absolute path to configuration directory (default: $HOME/reality)"
   echo "  -s, --safenet       Block malware and adult content (default: false)"
   echo "      --port          Server port !!Do not change it!! (default: 443)"
+  echo "      --natvps        For natvps.net servers only (default: false)"
   echo "  -h, --help          Display this help message"
 }
 
@@ -50,7 +52,7 @@ domain_regex="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
 path_regex="^/.*"
 
 # Parse arguments
-opts=$(getopt -o t:d:rup:sh --long trans:,domain:,regenerate,uninstall,path:,safenet,port:,help -- "$@")
+opts=$(getopt -o t:d:rup:sh --long trans:,domain:,regenerate,uninstall,path:,safenet,port:,natvps,help -- "$@")
 if [ $? -ne 0 ]; then
   show_help
   exit 1
@@ -114,6 +116,10 @@ while true; do
     fi
     shift 2
     ;;
+    --natvps)
+    natvps=true
+    shift
+    ;;
     -h|--help)
     show_help
     exit 0
@@ -172,6 +178,25 @@ EOF
 fi
 
 source "${path}/config"
+
+if $natvps; then
+  if [[ -z $natvps_port ]]; then
+    for i in $(seq -w 01 20); do
+      port="$(echo "${server}" | awk -F. '{print $4}')""${i}"
+      if ! lsof -i :"${port}" > /dev/null; then
+        natvps_port=$port
+        echo "natvps_port=${natvps_port}" >> "${path}/config"
+        break
+      fi
+    done
+  fi
+  if [[ -z $natvps_port ]]; then
+    echo "Free port was not found!"
+    exit 1
+  fi
+  port=$natvps_port
+  server=$(curl -fsSL --ipv4 http://ifconfig.io)
+fi
 
 cat >"${path}/docker-compose.yml" <<EOF
 version: "3"
