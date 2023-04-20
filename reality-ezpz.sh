@@ -27,7 +27,7 @@ uninstall=false
 path="$HOME/reality"
 safenet=false
 port=443
-image="teddysun/xray:1.8.0"
+image="teddysun/xray:1.8.1"
 natvps=false
 server=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
 
