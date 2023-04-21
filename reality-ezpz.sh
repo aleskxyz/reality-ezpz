@@ -168,7 +168,7 @@ fi
 
 mkdir -p "${path}"
 if [[ ! -e "${path}/config" ]]; then
-key_pair=$(sudo docker run -q --rm ${image} xray x25519)
+key_pair=$(sudo docker run --rm ${image} xray x25519)
 cat >"${path}/config" <<EOF
 uuid=$(cat /proc/sys/kernel/random/uuid)
 public_key=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
