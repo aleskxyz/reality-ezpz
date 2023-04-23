@@ -133,6 +133,8 @@ After getting a license from that telegram bot, you can use the license for your
 ```
 bash <(curl -sL https://bit.ly/realityez) --warp-license aaaaaaaa-bbbbbbbb-cccccccc
 ```
+You can use each warp+ license on for devices only.
+
 You can disable Cloudflare WARP by using `--disable-warp` option:
 ```
 bash <(curl -sL https://bit.ly/realityez) --disable-warp
