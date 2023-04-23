@@ -18,208 +18,402 @@
 # under the License.
 
 set -e
+declare -A defaults
+declare -A file
+declare -A args
+declare -A config
 
-# Default values
-trans="tcp"
-domain="www.google.com"
-regenerate=false
-uninstall=false
-path="$HOME/reality"
-safenet=false
-port=443
-image="teddysun/xray:1.8.1"
-natvps=false
-server=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
+default_path="${HOME}/reality"
+xray_image="teddysun/xray:1.8.1"
+warp_image="aleskxyz/warp-svc:1.2"
 
-# Function to display help information
+defaults[transport]=tcp
+defaults[domain]=www.google.com
+defaults[port]=443
+defaults[safenet]=false
+defaults[natvps]=false
+defaults[warp]=false
+
+config_items=(
+  "uuid"
+  "public_key"
+  "private_key"
+  "short_id"
+  "transport"
+  "domain"
+  "server"
+  "port"
+  "safenet"
+  "natvps"
+  "warp"
+  "warp_license"
+)
+
 function show_help {
-  echo "Usage: $0 [-t|--trans=h2|grpc|tcp] [-d|--domain=<domain>] [-r|--regenerate] [-p|--path=<path>] [--port=<port>] [--natvps] [-u|--uninstall]"
-  echo "  -t, --trans         Transport protocol to use (default: tcp)"
-  echo "  -d, --domain        Domain to use (default: www.google.com)"
-  echo "  -r, --regenerate    Regenerate configuration (default: false)"
-  echo "  -u, --uninstall     Uninstall reality (default: false)"
-  echo "  -p, --path          Absolute path to configuration directory (default: $HOME/reality)"
-  echo "  -s, --safenet       Block malware and adult content (default: false)"
-  echo "      --port          Server port !!Do not change it!! (default: 443)"
-  echo "      --natvps        For natvps.net servers only (default: false)"
-  echo "  -h, --help          Display this help message"
+  echo ""
+  echo "Usage: reality-ezpz.sh [-t|--transport=h2|grpc|tcp] [-d|--domain=<domain>] [-r|--regenerate] [--default] [-p|--path=<path>] [-s|--enable-safenet] [--disable-safenet] [--port=<port>] [--enable-natvps] [--disable-natvps] [--warp-license=<license>] [-w|--enable-warp] [--disable-warp] [-u|--uninstall]"
+  echo "  -t, --transport        Transport protocol to use (default: ${defaults[transport]})"
+  echo "  -d, --domain           Domain to use (default: ${defaults[domain]})"
+  echo "  -r, --regenerate       Delete existing user and create new one"
+  echo "      --default          Restore default configuration"
+  echo "  -u, --uninstall        Uninstall reality"
+  echo "  -p, --path             Absolute path to configuration directory (default: ${default_path})"
+  echo "  -s  --enable-safenet   Enable blocking malware and adult content"
+  echo "      --disable-safenet  Disable block malware and adult content"
+  echo "      --port             Server port !!Do not change it!! (default: ${defaults[port]})"
+  echo "      --enable-natvps    Enable natvps.net support"
+  echo "      --disble-natvps    Disable natvps.net support"
+  echo "      --warp-license     Add Cloudflare warp+ license"
+  echo "  -w  --enable-warp      Enable Cloudflare warp"
+  echo "      --disable-warp     Disable Cloudflare warp"
+  echo "  -h, --help             Display this help message"
+  return 1
 }
 
-# Regular expression for domain validation
-domain_regex="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
-
-# Regular expression for absolute path validation
-path_regex="^/.*"
-
-# Parse arguments
-opts=$(getopt -o t:d:rup:sh --long trans:,domain:,regenerate,uninstall,path:,safenet,port:,natvps,help -- "$@")
-if [ $? -ne 0 ]; then
-  show_help
-  exit 1
-fi
-eval set -- "$opts"
-while true; do
-  case $1 in
-    -t|--trans)
-    trans="$2"
-    case $trans in
-      h2|grpc|tcp)
+function parse_args {
+  local domain_regex="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
+  local path_regex="^/.*"
+  local port_regex="^[0-9]+$"
+  local warp_license_regex="^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}$"
+  local opts
+  opts=$(getopt -o t:d:ruwsp:h --long transport:,domain:,regenerate,default,uninstall,path:,enable-safenet,disable-safenet,port:,enable-natvps,disable-natvps,warp-license:,enable-warp,disable-warp,help -- "$@")
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+  eval set -- "$opts"
+  while true; do
+    case $1 in
+      -t|--transport)
+      args[transport]="$2"
+      case ${args[transport]} in
+        h2|grpc|tcp)
+        shift 2
+        ;;
+        *)
+        echo "Invalid transport protocol: ${args[transport]}"
+        return 1
+        ;;
+      esac
+      ;;
+      -d|--domain)
+      args[domain]="$2"
+      if ! [[ ${args[domain]} =~ $domain_regex ]]; then
+        echo "Invalid domain: ${args[domain]}"
+        return 1
+      fi
       shift 2
       ;;
+      -r|--regenerate)
+      args[regenerate]=true
+      shift
+      ;;
+      --default)
+      args[default]=true
+      shift
+      ;;
+      -u|--uninstall)
+      args[uninstall]=true
+      shift
+      ;;
+      -p|--path)
+      args[path]="$2"
+      if ! [[ ${args[path]} =~ $path_regex ]]; then
+        echo "Use absolute path: ${args[path]}"
+        return 1
+      fi
+      shift 2
+      ;;
+      -s|--enable-safenet)
+      local enable_safenet=true
+      shift
+      ;;
+      --disable-safenet)
+      local disable_safenet=true
+      shift
+      ;;
+      --port)
+      args[port]="$2"
+      if ! [[ ${args[port]} =~ $port_regex ]]; then
+        echo "Invalid port number: ${args[port]}"
+        return 1
+      elif ((args[port] < 1 || args[port] > 65535)); then
+        echo "Port number out of range: ${args[port]}"
+        return 1
+      fi
+      shift 2
+      ;;
+      --enable-natvps)
+      local enable_natvps=true
+      shift
+      ;;
+      --disable-natvps)
+      local disable_natvps=true
+      shift
+      ;;
+      --warp-license)
+      args[warp_license]="$2"
+      if ! [[ ${args[warp_license]} =~ $warp_license_regex ]]; then
+        echo "Invalid warp license: ${args[warp_license]}"
+        return 1
+      fi
+      shift 2
+      ;;
+      -w|--enable-warp)
+      local enable_warp=true
+      shift
+      ;;
+      --disable-warp)
+      local disable_warp=true
+      shift
+      ;;
+      -h|--help)
+      return 1
+      ;;
+      --)
+      shift
+      break
+      ;;
       *)
-      echo "Invalid transport protocol: $trans"
-      show_help
-      exit 1
+      echo "Unknown option: $1"
+      return 1
       ;;
     esac
-    ;;
-    -d|--domain)
-    domain="$2"
-    if ! [[ $domain =~ $domain_regex ]]; then
-      echo "Invalid domain: $domain"
-      show_help
-      exit 1
-    fi
-    shift 2
-    ;;
-    -r|--regenerate)
-    regenerate=true
-    shift
-    ;;
-    -u|--uninstall)
-    uninstall=true
-    shift
-    ;;
-    -p|--path)
-    path="$2"
-    if ! [[ $path =~ $path_regex ]]; then
-      echo "Use absolute path: $path"
-      show_help
-      exit 1
-    fi
-    shift 2
-    ;;
-    -s|--safenet)
-    safenet=true
-    shift
-    ;;
-    --port)
-    port="$2"
-    if ! [[ $port =~ ^[0-9]+$ ]]; then
-      echo "Invalid port number: $port"
-      show_help
-      exit 1
-    elif ((port < 1 || port > 65535)); then
-      echo "Port number out of range: $port"
-      show_help
-      exit 1
-    fi
-    shift 2
-    ;;
-    --natvps)
-    natvps=true
-    shift
-    ;;
-    -h|--help)
-    show_help
-    exit 0
-    ;;
-    --)
-    shift
-    break
-    ;;
-    *)
-    echo "Unknown option: $1"
-    show_help
-    exit 1
-    ;;
-  esac
-done
+  done
 
-if $uninstall; then
-  if command -v docker > /dev/null 2>&1; then
-    sudo docker compose --project-directory "${path}" down
-  fi 
-  rm -rf "${path}"
-  exit 0
-fi
-
-if $regenerate; then
-  rm -rf "${path}"
-fi
-
-if ! command -v qrencode > /dev/null 2>&1; then
-  if command -v apt > /dev/null 2>&1; then
-    sudo apt update
-    sudo apt install qrencode -y
-  elif command -v yum > /dev/null 2>&1; then
-    sudo yum makecache
-    sudo yum install epel-release -y || true
-    sudo yum install qrencode -y
-  else
-    echo "OS is not supported!"
-    exit 1
+  if [[ -z ${args[path]} ]]; then
+    args[path]="${default_path}"
   fi
-fi
-if ! command -v docker > /dev/null 2>&1; then
-  curl -fsSL https://get.docker.com | sudo bash
-  systemctl enable --now docker
-fi
 
-mkdir -p "${path}"
-if [[ ! -e "${path}/config" ]]; then
-key_pair=$(sudo docker run --rm ${image} xray x25519)
-cat >"${path}/config" <<EOF
-uuid=$(cat /proc/sys/kernel/random/uuid)
-public_key=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
-private_key=$(echo "${key_pair}"|grep -oP '(?<=Private key: ).*')
-short_id=$(openssl rand -hex 8)
-EOF
-fi
+  if [[ ${args[uninstall]} == true ]]; then
+    uninstall
+  fi
 
-source "${path}/config"
+  if [[ -n ${args[warp_license]} ]] && [[ $disable_warp == true ]]; then
+    echo "--warp-license cannot be used with --disable-warp"
+    return 1
+  fi
 
-if $natvps; then
-  if [[ -z $natvps_port ]]; then
-    for i in $(seq -w 01 20); do
-      port="$(echo "${server}" | awk -F. '{print $4}')""${i}"
-      if ! lsof -i :"${port}" > /dev/null; then
-        natvps_port=$port
-        echo "natvps_port=${natvps_port}" >> "${path}/config"
-        break
-      fi
+  if [[ $enable_warp == true ]] && [[ $disable_warp == true ]]; then
+    echo "--enable-warp and --disable-warp cannot be used together"
+    return 1
+  fi
+
+  if [[ -n ${args[warp_license]} ]]; then
+    args[warp]=true
+  fi
+
+  if [[ $enable_warp == true ]]; then
+    args[warp]=true
+  fi
+
+  if [[ $disable_warp == true ]]; then
+    args[warp]=false
+  fi
+
+  if [[ $enable_natvps == true ]] && [[ $disable_natvps == true ]]; then
+    echo "--enable-natvps and --disable-natvps cannot be used together"
+    return 1
+  fi
+
+  if [[ $enable_natvps == true ]]; then
+    args[natvps]=true
+  fi
+
+  if [[ $disable_natvps == true ]]; then
+    args[natvps]=false
+  fi
+
+  if [[ $enable_safenet == true ]] && [[ $disable_safenet == true ]]; then
+    echo "--enable-safenet and --disable-safenet cannot be used together"
+    return 1
+  fi
+
+  if [[ $enable_safenet == true ]]; then
+    args[safenet]=true
+  fi
+
+  if [[ $disable_safenet == true ]]; then
+    args[safenet]=false
+  fi
+}
+
+function parse_config_file {
+  if [[ ! -e "${config_file}" ]]; then
+    generate_keys
+    return 0
+  fi
+  source "${config_file}"
+  if [[ -z $uuid || \
+        -z $public_key || \
+        -z $private_key || \
+        -z $short_id ]]; then
+    generate_keys
+  fi
+  for item in "${config_items[@]}"; do
+    file["${item}"]="${!item}"
+  done
+}
+
+function build_config {
+  if [[ ${args[regenerate]} == true ]]; then
+    generate_keys
+  fi
+  for item in "${config_items[@]}"; do
+    if [[ -n ${args["${item}"]} ]]; then
+      config["${item}"]="${args[${item}]}"
+    elif [[ -n ${file["${item}"]} ]]; then
+      config["${item}"]="${file[${item}]}"
+    else
+      config["${item}"]="${defaults[${item}]}"
+    fi
+  done
+  if [[ ${args[default]} == true ]]; then
+    local defaults_items=("${!defaults[@]}")
+    for item in "${defaults_items[@]}"; do
+        config["${item}"]="${defaults[${item}]}"
     done
+    return 0
   fi
-  if [[ -z $natvps_port ]]; then
-    echo "Free port was not found!"
-    exit 1
+  config[server]=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
+  if [[ ${config[natvps]} == true ]]; then
+    natvps_check_port
   fi
-  port=$natvps_port
-  server=$(curl -fsSL --ipv4 http://ifconfig.io)
-fi
+  if [[ ${args[natvps]} == false ]] && [[ -z ${args[port]} ]] && [[ ${file[natvps]} == true ]]; then
+    config[port]="${defaults[port]}"
+  fi
+}
 
-cat >"${path}/docker-compose.yml" <<EOF
+function update_config_file {
+  mkdir -p "${config_path}"
+  touch "${config_file}"
+  for item in "${config_items[@]}"; do
+    if grep -q "^${item}=" "${config_file}"; then
+      sed -i "s/^${item}=.*/${item}=${config[${item}]}/" "${config_file}"
+    else
+      echo "${item}=${config[${item}]}" >> "${config_file}"
+    fi
+  done
+}
+
+function natvps_check_port {
+  local server
+  local first_port
+  local last_port
+  first_port="$(echo "${config[server]}" | awk -F. '{print $4}')"01
+  last_port="$(echo "${config[server]}" | awk -F. '{print $4}')"20
+  config[server]=$(curl -fsSL --ipv4 http://ifconfig.io)
+  if ((config[port] >= first_port && config[port] <= last_port)); then
+    if ! lsof -i :"${config[port]}" > /dev/null; then
+      return 0
+    fi
+  fi
+  for port in $(seq "${first_port}" "${last_port}"); do
+    if ! lsof -i :"${port}" > /dev/null; then
+      config[port]=$port
+      return 0
+    fi
+  done
+  echo "Error: Free port was not found."
+  return 1
+}
+
+function generate_keys {
+  local key_pair
+  key_pair=$(sudo docker run --rm ${xray_image} xray x25519)
+  args[uuid]=$(cat /proc/sys/kernel/random/uuid)
+  args[public_key]=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
+  args[private_key]=$(echo "${key_pair}"|grep -oP '(?<=Private key: ).*')
+  args[short_id]=$(openssl rand -hex 8)
+}
+
+function uninstall {
+  if docker compose > /dev/null 2>&1; then
+    sudo docker compose --project-directory "${args[path]}" down || true
+  elif which docker-compose > /dev/null 2>&1; then
+    sudo docker-compose --project-directory "${args[path]}" down || true
+  fi
+  rm -rf "${args[path]}"
+  exit 0
+}
+
+function install_packages {
+  if ! which jq qrencode > /dev/null 2>&1; then
+    if which apt > /dev/null 2>&1; then
+      sudo apt update
+      sudo apt install qrencode jq -y
+      return 0
+    fi
+    if which yum > /dev/null 2>&1; then
+      sudo yum makecache
+      sudo yum install epel-release -y || true
+      sudo yum install qrencode jq -y
+      return 0
+    fi
+    echo "OS is not supported!"
+    return 1
+  fi
+}
+
+function install_docker {
+  if ! which docker > /dev/null 2>&1; then
+    curl -fsSL https://get.docker.com | sudo bash
+    sudo systemctl enable --now docker
+    docker_cmd="docker compose"
+    return 0
+  fi
+  if docker compose > /dev/null 2>&1; then
+    docker_cmd="docker compose"
+    return 0
+  fi
+  if which docker-compose > /dev/null 2>&1; then
+    docker_cmd="docker-compose"
+    return 0
+  fi
+  sudo curl -SL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  sudo chmod +x /usr/local/bin/docker-compose
+  docker_cmd="docker-compose"
+  return 0
+}
+
+function generate_docker_compose {
+cat >"${config_path}/docker-compose.yml" <<EOF
 version: "3"
 services:
   xray:
-    image: ${image}
+    image: ${xray_image}
     ports:
-    $([[ $port -eq 443 ]] && echo '- 80:8080' || true)
-    - ${port}:8443
+    $([[ ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
+    - ${config[port]}:8443
     restart: always
     environment:
     - "TZ=Etc/UTC"
     volumes:
     - ./xray.conf:/etc/xray/config.json
+$(if [[ ${config[warp]} == true ]]; then
+echo "  warp:
+    image: ${warp_image}
+    expose:
+    - 1080
+    restart: always
+    environment:
+      FAMILIES_MODE: $([[ ${config[safenet]} == true ]] && echo 'full' || echo 'off')
+      WARP_LICENSE: ${config[warp_license]}
+    volumes:
+    - ./warp:/var/lib/cloudflare-warp"
+fi
+)
 EOF
+}
 
-cat >"${path}/xray.conf" <<EOF
+function generate_xray_config {
+cat >"${config_path}/xray.conf" <<EOF
 {
   "log": {
     "loglevel": "warning"
   },
   "dns": {
-    "servers": [$($safenet && echo '"1.1.1.3","1.0.0.3"' || echo '"1.1.1.1","1.0.0.1"')]
+    "servers": [$([[ ${config[safenet]} == true ]] && echo '"tcp+local://1.1.1.3","tcp+local://1.0.0.3"' || echo '"tcp+local://1.1.1.1","tcp+local://1.0.0.1"')
+    $([[ ${config[warp]} == true ]] && echo ',{"address": "localhost","domains": ["full:warp"]}' || true)]
   },
   "inbounds": [
     {
@@ -227,7 +421,7 @@ cat >"${path}/xray.conf" <<EOF
       "port": 8080,
       "protocol": "dokodemo-door",
       "settings": {
-        "address": "${domain}",
+        "address": "${config[domain]}",
         "port": 80,
         "network": "tcp"
       }
@@ -239,27 +433,27 @@ cat >"${path}/xray.conf" <<EOF
       "settings": {
         "clients": [
           {
-            "id": "${uuid}",
-            "flow": "$([[ $trans == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
+            "id": "${config[uuid]}",
+            "flow": "$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
           }
         ],
         "decryption": "none"
       },
       "streamSettings": {
-        $([[ $trans == 'grpc' ]] && echo '"grpcSettings": {"serviceName": "grpc"},' || true)
-        "network": "${trans}",
+        $([[ ${config[transport]} == 'grpc' ]] && echo '"grpcSettings": {"serviceName": "grpc"},' || true)
+        "network": "${config[transport]}",
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "dest": "${domain}:443",
+          "dest": "${config[domain]}:443",
           "xver": 0,
           "serverNames": [
-            "${domain}"
+            "${config[domain]}"
           ],
-          "privateKey": "${private_key}",
+          "privateKey": "${config[private_key]}",
           "maxTimeDiff": 60000,
           "shortIds": [
-            "${short_id}"
+            "${config[short_id]}"
           ]
         }
       },
@@ -273,9 +467,7 @@ cat >"${path}/xray.conf" <<EOF
     }
   ],
   "outbounds": [
-    {
-      "protocol": "freedom"
-    },
+    $([[ ${config[warp]} == true ]] && echo '{"protocol": "socks","settings": {"servers": [{"address": "warp","port": 1080}]}},' || echo '{"protocol": "freedom"},')
     {
       "protocol": "blackhole",
       "tag": "block"
@@ -287,6 +479,7 @@ cat >"${path}/xray.conf" <<EOF
       {
         "type": "field",
         "ip": [
+          $([[ ${config[warp]} == false ]] && echo '"geoip:cn", "geoip:ir",')
           "0.0.0.0/8",
           "10.0.0.0/8",
           "100.64.0.0/10",
@@ -302,9 +495,7 @@ cat >"${path}/xray.conf" <<EOF
           "::1/128",
           "fc00::/7",
           "fe80::/10",
-          "geoip:private",
-          "geoip:cn",
-          "geoip:ir"
+          "geoip:private"
         ],
         "outboundTag": "block"
       },
@@ -323,7 +514,7 @@ cat >"${path}/xray.conf" <<EOF
         "type": "field",
         "outboundTag": "block",
         "domain": [
-          $($safenet && echo '"geosite:category-porn",' || true)
+          $([[ ${config[safenet]} == true ]] && echo '"geosite:category-porn",' || true)
           "geosite:category-ads-all",
           "domain:pushnotificationws.com",
           "domain:sunlight-leds.com",
@@ -342,17 +533,32 @@ cat >"${path}/xray.conf" <<EOF
   }
 }
 EOF
+}
 
-sudo docker compose --project-directory "${path}" down
-sudo docker compose --project-directory "${path}" up -d
+function print_client_configuration {
+  client_config="vless://${config[uuid]}@${config[server]}:${config[port]}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${config[public_key]}&headerType=none&fp=chrome&type=${config[transport]}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${config[domain]}&sid=${config[short_id]}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
+  echo ""
+  echo "=================================================="
+  echo "Client configuration:"
+  echo ""
+  echo "$client_config"
+  echo ""
+  echo "Or you can scan the QR code:"
+  echo ""
+  qrencode -t ansiutf8 "${client_config}"
+}
 
-config="vless://${uuid}@${server}:${port}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${public_key}&headerType=none&fp=chrome&type=${trans}&flow=$([[ $trans == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${domain}&sid=${short_id}$([[ $trans == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
-echo ""
-echo "=================================================="
-echo "Client configuration:"
-echo ""
-echo "$config"
-echo ""
-echo "Or you can scan the QR code:"
-echo ""
-qrencode -t ansiutf8 "${config}"
+parse_args "$@" || show_help
+config_path="${args[path]}"
+config_file="${config_path}/config"
+install_packages
+install_docker
+parse_config_file
+sudo ${docker_cmd} --project-directory ${config_path} down || true
+build_config
+update_config_file
+generate_docker_compose
+generate_xray_config
+sudo ${docker_cmd} --project-directory ${config_path} up -d
+print_client_configuration
+exit 0
