@@ -536,7 +536,7 @@ EOF
 }
 
 function print_client_configuration {
-  client_config="vless://${config[uuid]}@${config[server]}:${config[port]}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${config[public_key]}&headerType=none&fp=chrome&type=${config[transport]}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)&sni=${config[domain]}&sid=${config[short_id]}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
+  client_config="vless://${config[uuid]}@${config[server]}:${config[port]}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${config[public_key]}&headerType=none&fp=chrome&type=${config[transport]}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision-udp443' || true)&sni=${config[domain]}&sid=${config[short_id]}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
   echo ""
   echo "=================================================="
   echo "Client configuration:"
