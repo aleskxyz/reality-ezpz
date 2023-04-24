@@ -42,11 +42,22 @@ bash <(curl -sL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/r
 After a while you will get confgiuration string and QR code:
 ![image](https://user-images.githubusercontent.com/39186039/232563871-0140e10a-22b4-4653-9bc9-cdba519a8b41.png)
 
+## Clients
+- Android
+  - [v2rayNG](https://github.com/2dust/v2rayNg/releases)
+- iOS
+  - [Wings X](https://apps.apple.com/app/wings-x-client/id6446119727)
+  - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+  - [Stash](https://apps.apple.com/app/stash/id1596063349)
+- Windows
+  - [v2rayN](https://github.com/2dust/v2rayN/releases)
+
 ## Advanced Configuration
 You can change script defaults by using different arguments.
 
 ~~Notice: You need to mention non-default options each time when you want to run the script, otherwise it will use its default options and overwrite you existing configurations.~~
-You configuration will be saved and restore in each execution.
+
+Your configuration will be saved and restored in each execution.
 
 ### Change SNI domain
 Default SNI domain is `www.google.com`.
@@ -142,7 +153,7 @@ bash <(curl -sL https://bit.ly/realityez) --disable-warp
 ## Example
 You can combine different options together.
 
-We want to setup your server this these configurations:
+We want to setup a server with these configurations:
 * `grpc` transport protocol
 * `www.wikipedia.org` as SNI domain
 * Block adult contents
