@@ -39,7 +39,7 @@ or (if the above command dosen't work):
 ```
 bash <(curl -sL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/reality-ezpz.sh)
 ```
-After a while you will get confgiuration string and QR code:
+After a while you will get configuration string and QR code:
 ![image](https://user-images.githubusercontent.com/39186039/232563871-0140e10a-22b4-4653-9bc9-cdba519a8b41.png)
 
 ## Clients
