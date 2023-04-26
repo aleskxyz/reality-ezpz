@@ -274,7 +274,8 @@ function build_config {
     done
     return 0
   fi
-  config[server]=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
+  config[server_ip]=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
+  config[public_ip]=$(curl -fsSL --ipv4 http://ifconfig.io)
   if [[ ${config[natvps]} == true ]]; then
     natvps_check_port
   fi
@@ -296,12 +297,10 @@ function update_config_file {
 }
 
 function natvps_check_port {
-  local server
   local first_port
   local last_port
-  first_port="$(echo "${config[server]}" | awk -F. '{print $4}')"01
-  last_port="$(echo "${config[server]}" | awk -F. '{print $4}')"20
-  config[server]=$(curl -fsSL --ipv4 http://ifconfig.io)
+  first_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"01
+  last_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"20
   if ((config[port] >= first_port && config[port] <= last_port)); then
     if ! lsof -i :"${config[port]}" > /dev/null; then
       return 0
@@ -536,7 +535,7 @@ EOF
 }
 
 function print_client_configuration {
-  client_config="vless://${config[uuid]}@${config[server]}:${config[port]}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${config[public_key]}&headerType=none&fp=chrome&type=${config[transport]}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision-udp443' || true)&sni=${config[domain]}&sid=${config[short_id]}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
+  client_config="vless://${config[uuid]}@${config[public_ip]}:${config[port]}?security=reality&encryption=none&alpn=h2,http/1.1&pbk=${config[public_key]}&headerType=none&fp=chrome&type=${config[transport]}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision-udp443' || true)&sni=${config[domain]}&sid=${config[short_id]}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=multi&serviceName=grpc' || true)#RealityEZPZ"
   echo ""
   echo "=================================================="
   echo "Client configuration:"
