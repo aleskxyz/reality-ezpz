@@ -29,7 +29,7 @@ warp_image="aleskxyz/warp-svc:1.2"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
-defaults[port]=443
+defaults[port]=4430
 defaults[safenet]=false
 defaults[natvps]=false
 defaults[warp]=false
@@ -381,7 +381,7 @@ services:
   xray:
     image: ${xray_image}
     ports:
-    $([[ ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
+    $([[ ${config[port]} -eq 4430 ]] && echo '- 80:8080' || true)
     - ${config[port]}:8443
     restart: always
     environment:
@@ -444,7 +444,7 @@ cat >"${config_path}/xray.conf" <<EOF
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "dest": "${config[domain]}:443",
+          "dest": "${config[domain]}:4430",
           "xver": 0,
           "serverNames": [
             "${config[domain]}"
