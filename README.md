@@ -3,13 +3,16 @@ You can install and configure reality protocol on your linux server by executing
 
 This script:
 * Installs docker with compose plugin in your server
-* Generates docker-compose.yml and reality (xray) configuration
+* Generates docker-compose.yml and reality configuration
 * Create Cloudflare warp account and configure warp as outbound
 * Generates client configuration string and QRcode
 
 Features:
 * Generates client configuration string
 * Generates client configuration QRcode
+* You can choose between xray or sing-box core
+* You can use a Text-based user interface (TUI)
+* You can create multiple user accounts
 * You can regenerate configuration and keys
 * You can change SNI domain
 * You can change transport protocol
@@ -42,9 +45,17 @@ bash <(curl -sL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/r
 After a while you will get configuration string and QR code:
 ![image](https://user-images.githubusercontent.com/39186039/232563871-0140e10a-22b4-4653-9bc9-cdba519a8b41.png)
 
+If you want to create more users, you should run TUI with `-m` or `--menu` option:
+```
+bash <(curl -sL https://bit.ly/realityez) -m
+```
+And then you will see management menu in your terminal:
+image.png
+
 ## Clients
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNg/releases)
+  - [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid/releases)
 - iOS
   - [Wings X](https://apps.apple.com/app/wings-x-client/id6446119727)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
@@ -54,8 +65,6 @@ After a while you will get configuration string and QR code:
 
 ## Advanced Configuration
 You can change script defaults by using different arguments.
-
-~~Notice: You need to mention non-default options each time when you want to run the script, otherwise it will use its default options and overwrite you existing configurations.~~
 
 Your configuration will be saved and restored in each execution.
 
@@ -67,7 +76,7 @@ You can change it by using `--domain` or `-d` options:
 bash <(curl -sL https://bit.ly/realityez) -d yahoo.com
 ```
 ### Change transport protocol
-Default transport protocol is `tcp`.
+Default (and recommended) transport protocol is `tcp`.
 
 You can change it by using `--transport` or `-t` options:
 ```
@@ -96,9 +105,9 @@ You can solve these problems by running this command:
 grep -q "^DNS=1.1.1.1$" /etc/systemd/resolved.conf || echo "DNS=1.1.1.1" >> /etc/systemd/resolved.conf && systemctl restart systemd-resolved && apt update && apt install curl -y
 ```
 ### Regenerate user account
-You can regenerate user account by using `--regenerate` or `-r` options:
+You can regenerate user account by using `--regenerate` option:
 ```
-bash <(curl -sL https://bit.ly/realityez) -r
+bash <(curl -sL https://bit.ly/realityez) --regenerate
 ```
 All other configuration will be same as before.
 ### Restore default configuration
@@ -129,6 +138,22 @@ You can change it by using `--port` option:
 ```
 bash <(curl -sL https://bit.ly/realityez) --port 8443
 ```
+### Change engine core
+Default engine core is xray ut you can also switch to sing-box by using `--core` or `-c` options:
+```
+bash <(curl -sL https://bit.ly/realityez) -c singbox
+```
+Valid options are `xray` and `singbox`.
+### Text-based user interface (TUI)
+You can also use the TUI for changing the configuration of the service.
+
+By using TUI you are able to define more than one user account and manage then.
+
+To access to TUI you can use `-m` or `--menu` options:
+```
+bash <(curl -sL https://bit.ly/realityez) -m
+```
+Notice: All changes (configuration and user management) will apply after exit from TUI.
 ## Cloudflare WARP
 This script uses official Cloudflare WARP client for connecting to Cloudflare network and send all outbound traffic to Cloudflare server. So your servers address will be masked by Cloudflare IPs. This gives you a better web surffing experience due to less captcha challenges and also resolves some websites limitations on your servers IP.
 
