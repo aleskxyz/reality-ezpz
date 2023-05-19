@@ -50,7 +50,7 @@ If you want to create more users, you should run TUI with `-m` or `--menu` optio
 bash <(curl -sL https://bit.ly/realityez) -m
 ```
 And then you will see management menu in your terminal:
-image.png
+![image](https://github.com/aleskxyz/reality-ezpz/assets/39186039/a727148c-1a11-4702-80f3-ab8b46d916af)
 
 ## Clients
 - Android
