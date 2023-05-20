@@ -360,6 +360,7 @@ function update_config_file {
       echo "${item}=${config[${item}]}" >> "${config_file_path}"
     fi
   done
+  reload_configuration
 }
 
 function update_users_file {
@@ -367,6 +368,7 @@ function update_users_file {
   for user in "${!users[@]}"; do
     echo "${user}=${users[${user}]}" >> "${users_file_path}"
   done
+  reload_configuration
 }
 
 function natvps_check_port {
@@ -928,7 +930,7 @@ Remaks: ${username}
 Address: ${config[server]}
 Port: ${config[port]}
 ID: ${users[$username]}
-Flow: $([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision-udp443' || true)
+Flow: $([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)
 Network: ${config[transport]}$([[ ${config[transport]} == 'grpc' ]] && echo "\ngRPC mode: multi\ngRPC serviceName: grpc" || true)
 TLS: reality
 SNI: ${config[domain]}
@@ -1224,6 +1226,10 @@ function config_natvps_menu {
 function restart_docker_compose {
   sudo ${docker_cmd} --project-directory ${config_path} down --remove-orphans || true
   sudo ${docker_cmd} --project-directory ${config_path} up -d --remove-orphans
+}
+
+function reload_configuration {
+  sudo ${docker_cmd} --project-directory ${config_path} restart ${config[core]}
 }
 
 function message_box {
