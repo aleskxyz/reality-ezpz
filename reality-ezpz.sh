@@ -42,7 +42,7 @@ defaults[safenet]=OFF
 defaults[natvps]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
-defaults[core]="xray"
+defaults[core]="singbox"
 
 config_items=(
   "core"
