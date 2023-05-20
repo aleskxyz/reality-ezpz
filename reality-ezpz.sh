@@ -360,7 +360,6 @@ function update_config_file {
       echo "${item}=${config[${item}]}" >> "${config_file_path}"
     fi
   done
-  reload_configuration
 }
 
 function update_users_file {
@@ -368,7 +367,6 @@ function update_users_file {
   for user in "${!users[@]}"; do
     echo "${user}=${users[${user}]}" >> "${users_file_path}"
   done
-  reload_configuration
 }
 
 function natvps_check_port {
@@ -1226,10 +1224,6 @@ function config_natvps_menu {
 function restart_docker_compose {
   sudo ${docker_cmd} --project-directory ${config_path} down --remove-orphans || true
   sudo ${docker_cmd} --project-directory ${config_path} up -d --remove-orphans
-}
-
-function reload_configuration {
-  sudo ${docker_cmd} --project-directory ${config_path} restart ${config[core]}
 }
 
 function message_box {
