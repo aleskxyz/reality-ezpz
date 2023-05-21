@@ -812,7 +812,6 @@ function upgrade {
 
 function main_menu {
   local selection
-  local exit_status
   while true; do
     selection=$(whiptail --clear --backtitle "$BACKTITLE" --title "Server Management" \
       --menu "$MENU" $HEIGHT $WIDTH $CHOICE_HEIGHT \
@@ -825,8 +824,7 @@ function main_menu {
       "5" "Regenrate keys" \
       "6" "Configuration" \
       3>&1 1>&2 2>&3)
-    exit_status=$?
-    if [[ exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       break
     fi
     case $selection in
@@ -854,7 +852,6 @@ function main_menu {
 
 function add_user_menu {
   local username
-  local exit_status
   local message
   while true; do
     username=$(whiptail \
@@ -864,8 +861,7 @@ function add_user_menu {
       --inputbox "Enter username:" \
       $HEIGHT $WIDTH \
       3>&1 1>&2 2>&3)
-    exit_status=$?
-    if [[ exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       break
     fi
     if [[ ! $username =~ $username_regex ]]; then
@@ -887,8 +883,7 @@ function add_user_menu {
       --yesno "User \"${username}\" has been created." \
       $HEIGHT $WIDTH \
       3>&1 1>&2 2>&3
-    exit_status=$?
-    if [[ exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       break
     fi
     view_user_menu "${username}"
@@ -897,7 +892,6 @@ function add_user_menu {
 
 function delete_user_menu {
   local username
-  local exit_status
   while true; do
     username=$(list_users_menu "Delete User")
     if [[ $? -ne 0 ]]; then
@@ -914,8 +908,7 @@ function delete_user_menu {
       --yesno "Are you sure you want to delete $username?" \
       $HEIGHT $WIDTH \
       3>&1 1>&2 2>&3
-    exit_status=$?
-    if [[ exit_status -eq 0 ]]; then
+    if [[ $? -eq 0 ]]; then
       unset users["${username}"]
       update_users_file
       message_box "Delete User" "User \"${username}\" has been deleted."
@@ -925,7 +918,6 @@ function delete_user_menu {
 
 function view_user_menu {
   local username
-  local exit_status
   while true; do
     if [[ $# -gt 0 ]]; then
       username=$1
@@ -955,8 +947,7 @@ PublicKey: ${config[public_key]}
 ShortId: ${config[short_id]}" \
       $HEIGHT $WIDTH \
       3>&1 1>&2 2>&3
-    exit_status=$?
-    if [[ exit_status -eq 0 ]]; then
+    if [[ $? -eq 0 ]]; then
       clear
       print_client_configuration "${username}"
       echo
@@ -973,13 +964,11 @@ function list_users_menu {
   local title=$1
   local options
   local selection
-  local exit_status
   options=$(dict_expander users)
   selection=$(whiptail --clear --noitem --backtitle "$BACKTITLE" --title "$title" \
     --menu "Select the user" $HEIGHT $WIDTH $CHOICE_HEIGHT $options \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ exit_status -ne 0 ]]; then
+  if [[ $? -ne 0 ]]; then
     return 1
   fi
   echo "${selection}"
@@ -993,8 +982,7 @@ function restart_menu {
     --yesno "Are you sure to restart services?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  exit_status=$?
-  if [[ exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     restart_docker_compose
   fi
 }
@@ -1007,8 +995,7 @@ function regenerate_menu {
     --yesno "Are you sure to regenerate keys?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  exit_status=$?
-  if [[ exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     generate_keys
     config[public_key]=${config_file[public_key]}
     config[private_key]=${config_file[private_key]}
@@ -1020,7 +1007,6 @@ function regenerate_menu {
 
 function configuration_menu {
   local selection
-  local exit_status
   while true; do
     selection=$(whiptail --clear --backtitle "$BACKTITLE" --title "Configuration" \
       --menu "Select an option:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
@@ -1034,8 +1020,7 @@ function configuration_menu {
       "8" "WARP+ License" \
       "9" "natvps" \
       3>&1 1>&2 2>&3)
-    exit_status=$?
-    if [[ exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       break
     fi
     case $selection in
@@ -1072,14 +1057,12 @@ function configuration_menu {
 
 function config_core_menu {
   local core
-  local exit_status
   core=$(whiptail --clear --backtitle "$BACKTITLE" --title "Core" \
     --radiolist --noitem "Select a core engine:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "xray" "$([[ "${config[core]}" == 'xray' ]] && echo 'on' || echo 'off')" \
     "singbox" "$([[ "${config[core]}" == 'singbox' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ $exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     config[core]=$core
     update_config_file
   fi
@@ -1087,12 +1070,10 @@ function config_core_menu {
 
 function config_server_menu {
   local server
-  local exit_status
   server=$(whiptail --clear --backtitle "$BACKTITLE" --title "Server Address" \
     --inputbox "Enter Server IP or Domain:" $HEIGHT $WIDTH "${config["server"]}" \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     config[server]="${server}"
     update_config_file 
   fi
@@ -1100,15 +1081,13 @@ function config_server_menu {
 
 function config_transport_menu {
   local transport
-  local exit_status
   transport=$(whiptail --clear --backtitle "$BACKTITLE" --title "Transport" \
     --radiolist --noitem "Select a transport protocol:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "tcp" "$([[ "${config[transport]}" == 'tcp' ]] && echo 'on' || echo 'off')" \
     "h2" "$([[ "${config[transport]}" == 'h2' ]] && echo 'on' || echo 'off')" \
     "grpc" "$([[ "${config[transport]}" == 'grpc' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ $exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     config[transport]=$transport
     update_config_file
   fi
@@ -1116,13 +1095,11 @@ function config_transport_menu {
 
 function config_sni_domain_menu {
   local sni_domain
-  local exit_status
   while true; do
     sni_domain=$(whiptail --clear --backtitle "$BACKTITLE" --title "SNI Domain" \
       --inputbox "Enter SNI domain:" $HEIGHT $WIDTH "${config[domain]}" \
       3>&1 1>&2 2>&3)
-    exit_status=$?
-    if [[ $exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       break
     fi
     if [[ ! $sni_domain =~ $domain_regex ]]; then
@@ -1137,13 +1114,11 @@ function config_sni_domain_menu {
 
 function config_port_menu {
   local port
-  local exit_status
   while true; do
     port=$(whiptail --clear --backtitle "$BACKTITLE" --title "Port" \
       --inputbox "Enter port number:" $HEIGHT $WIDTH "${config[port]}" \
       3>&1 1>&2 2>&3)
-    exit_status=$?
-    if [[ $exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       break
     fi
     if [[ ! $port =~ $port_regex ]]; then
@@ -1172,13 +1147,11 @@ function config_port_menu {
 
 function config_safenet_menu {
   local safenet
-  local exit_status
   safenet=$(whiptail --clear --backtitle "$BACKTITLE" --title "Safe Internet" \
     --checklist --notags "Enable Safe Internet:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "safenet" "Enable Safe Internet" "${config[safenet]}" \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ $exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     config[safenet]=$([[ $safenet == '"safenet"' ]] && echo ON || echo OFF)
     update_config_file
   fi
@@ -1186,13 +1159,11 @@ function config_safenet_menu {
 
 function config_warp_menu {
   local warp
-  local exit_status
   warp=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP" \
     --checklist --notags "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "warp" "Enable WARP" "${config[warp]}" \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ $exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     config[warp]=$([[ $warp == '"warp"' ]] && echo ON || echo OFF)
     if [[ ${config[warp]} == 'ON' ]]; then
       config_warp_license_menu
@@ -1203,13 +1174,11 @@ function config_warp_menu {
 
 function config_warp_license_menu {
   local warp_license
-  local exit_status
   while true; do
     warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
       --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
       3>&1 1>&2 2>&3)
-    exit_status=$?
-    if [[ $exit_status -ne 0 ]]; then
+    if [[ $? -ne 0 ]]; then
       config[warp]=OFF
       update_config_file
       break
@@ -1226,13 +1195,11 @@ function config_warp_license_menu {
 
 function config_natvps_menu {
   local natvps
-  local exit_status
   natvps=$(whiptail --clear --backtitle "$BACKTITLE" --title "natvps.net" \
     --checklist --notags "natvps.net server:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "natvps" "natvps.net server" "${config[natvps]}" \
     3>&1 1>&2 2>&3)
-  exit_status=$?
-  if [[ $exit_status -eq 0 ]]; then
+  if [[ $? -eq 0 ]]; then
     config[natvps]=$([[ $natvps == '"natvps"' ]] && echo ON || echo OFF)
     natvps_check_port
     update_config_file
