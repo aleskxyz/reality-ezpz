@@ -67,31 +67,35 @@ username_regex="^[a-zA-Z0-9]+$"
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|h2|grpc] [-d|--domain=<domain>] [--regenerate] [--default] [-r|--restart] [-p|--path=<path>] [-s|--enable-safenet] [--disable-safenet] [--port=<port>] [--enable-natvps] [--disable-natvps] [--warp-license=<license>] [-w|--enable-warp] [--disable-warp] [-c|--core=xray|singbox] [-m|--menu] [-u|--uninstall]"
-  echo "  -t, --transport        Transport protocol (h2, grpc, tcp, default: ${defaults[transport]})"
-  echo "  -d, --domain           Domain to use as SNI (default: ${defaults[domain]})"
-  echo "      --regenerate       Regenerate public and private keys"
-  echo "      --default          Restore default configuration"
-  echo "  -r  --restart          Restart services"
-  echo "  -u, --uninstall        Uninstall reality"
-  echo "  -p, --path             Absolute path to configuration directory (default: ${default_path})"
-  echo "  -s  --enable-safenet   Enable blocking malware and adult content"
-  echo "      --disable-safenet  Disable block malware and adult content"
-  echo "      --port             Server port (default: ${defaults[port]})"
-  echo "      --enable-natvps    Enable natvps.net support"
-  echo "      --disble-natvps    Disable natvps.net support"
-  echo "      --warp-license     Add Cloudflare warp+ license"
-  echo "  -w  --enable-warp      Enable Cloudflare warp"
-  echo "      --disable-warp     Disable Cloudflare warp"
-  echo "  -c  --core             Select core (xray, singbox, default: ${defaults[core]})"
-  echo "  -m  --menu             Show menu"
-  echo "  -h, --help             Display this help message"
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|h2|grpc] [-d|--domain=<domain>] [--regenerate] [--default] [-r|--restart] [-p|--path=<path>] [-s|--enable-safenet] [--disable-safenet] [--port=<port>] [--enable-natvps] [--disable-natvps] [--warp-license=<license>] [-w|--enable-warp] [--disable-warp] [-c|--core=xray|singbox] [-m|--menu] [--add-user=<username>] [--lists-users] [--show-config=<username>] [--delete-user=<username>] [-u|--uninstall]"
+  echo "  -t, --transport <tcp|h2|grpc> Transport protocol (h2, grpc, tcp, default: ${defaults[transport]})"
+  echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
+  echo "      --regenerate          Regenerate public and private keys"
+  echo "      --default             Restore default configuration"
+  echo "  -r  --restart             Restart services"
+  echo "  -u, --uninstall           Uninstall reality"
+  echo "  -p, --path <path>         Absolute path to configuration directory (default: ${default_path})"
+  echo "  -s  --enable-safenet      Enable blocking malware and adult content"
+  echo "      --disable-safenet     Disable block malware and adult content"
+  echo "      --port <port>         Server port (default: ${defaults[port]})"
+  echo "      --enable-natvps       Enable natvps.net support"
+  echo "      --disble-natvps       Disable natvps.net support"
+  echo "      --warp-license <warp-license> Add Cloudflare warp+ license"
+  echo "  -w  --enable-warp         Enable Cloudflare warp"
+  echo "      --disable-warp        Disable Cloudflare warp"
+  echo "  -c  --core <singbox|xray> Select core (xray, singbox, default: ${defaults[core]})"
+  echo "  -m  --menu                Show menu"
+  echo "      --add-user <username> Add new user"
+  echo "      --list-users          List all users"
+  echo "      --show-config <username> Shows the config and QR code of the user"
+  echo "      --delete-user <username> Delete the user"
+  echo "  -h, --help                Display this help message"
   return 1
 }
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruwsp:c:mh --long transport:,domain:,regenerate,default,restart,uninstall,path:,enable-safenet,disable-safenet,port:,enable-natvps,disable-natvps,warp-license:,enable-warp,disable-warp,core,menu,help -- "$@")
+  opts=$(getopt -o t:d:ruwsp:c:mh --long transport:,domain:,regenerate,default,restart,uninstall,path:,enable-safenet,disable-safenet,port:,enable-natvps,disable-natvps,warp-license:,enable-warp,disable-warp,core,menu,add-user:,list-users,show-config:,delete-user:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -201,6 +205,26 @@ function parse_args {
         args[menu]=true
         shift
         ;;
+      --add-user)
+        args[add_user]="$2"
+        if ! [[ ${args[add_user]} =~ $username_regex ]]; then
+          echo "Invalid username: ${args[warp_license]}\nUsername can only contains A-Z, a-z and 0-9"
+          return 1
+        fi
+        shift 2
+        ;;
+      --list-users)
+        args[list_users]=true
+        shift
+        ;;
+      --show-config)
+        args[show_config]="$2"
+        shift 2
+        ;;
+      --delete-user)
+        args[delete_user]="$2"
+        shift 2
+        ;;
       -h|--help)
         return 1
         ;;
@@ -309,6 +333,25 @@ function parse_users_file {
     IFS="=" read -r key value <<< "${line}"
     users["${key}"]="${value}"
   done < "${users_file_path}"
+  if [[ -n ${args[add_user]} ]]; then
+    if [[ -z "${users["${args[add_user]}"]}" ]]; then
+      users["${args[add_user]}"]=$(cat /proc/sys/kernel/random/uuid)
+    else
+      echo "User \"${args[add_user]}\" already exists."
+    fi
+  fi
+  if [[ -n ${args[delete_user]} ]]; then
+    if [[ -n "${users["${args[delete_user]}"]}" ]]; then
+      if [[ ${#users[@]} -eq 1 ]]; then
+        echo -e "You cannot delete the only user.\nAt least one user is needed.\nCreate a new user, then delete this one."
+        exit 1
+      fi
+      unset users["${args[delete_user]}"]
+    else
+      echo "User \"${args[delete_user]}\" does not exists."
+      exit 1
+    fi
+  fi
   if [[ ${#users[@]} -eq 0 ]]; then
     users['RealityEZPZ']=$(cat /proc/sys/kernel/random/uuid)
     echo "RealityEZPZ=${users['RealityEZPZ']}" >> "${users_file_path}"
@@ -1268,6 +1311,7 @@ parse_config_file
 parse_users_file
 build_config
 update_config_file
+update_users_file
 if [[ ${args[menu]} == 'true' ]]; then
   set +e
   main_menu
@@ -1279,7 +1323,26 @@ fi
 if [[ -z "$(sudo ${docker_cmd} --project-directory ${config_path} ls | grep "${compose_file_path}" | grep running || true)" ]]; then
   restart_docker_compose
 fi
+if [[ -n ${args[list_users]} ]]; then
+  for user in "${!users[@]}"; do
+    echo "${user}"
+  done
+  exit 0
+fi
 if [[ ${#users[@]} -eq 1 ]]; then
-  print_client_configuration "${!users[@]}"
+  username="${!users[@]}"
+fi
+if [[ -n ${args[show_config]} ]]; then
+  username="${args[show_config]}"
+  if [[ -z "${users["${username}"]}" ]]; then
+    echo "User \"$username\" does not exists."
+    exit 1
+  fi
+fi
+if [[ -n ${args[add_user]} ]]; then
+  username="${args[add_user]}"
+fi
+if [[ -n $username ]]; then
+  print_client_configuration "${username}"
 fi
 exit 0
