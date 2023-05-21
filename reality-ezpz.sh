@@ -360,6 +360,7 @@ function update_config_file {
       echo "${item}=${config[${item}]}" >> "${config_file_path}"
     fi
   done
+  check_reload
 }
 
 function update_users_file {
@@ -367,6 +368,7 @@ function update_users_file {
   for user in "${!users[@]}"; do
     echo "${user}=${users[${user}]}" >> "${users_file_path}"
   done
+  check_reload
 }
 
 function natvps_check_port {
@@ -445,7 +447,7 @@ function install_docker {
 }
 
 function generate_docker_compose {
-  cat >"${config_path}/docker-compose.yml" <<EOF
+  cat >"${compose_file_path}" <<EOF
 version: "3"
 networks:
   reality:
@@ -466,7 +468,7 @@ echo "
     environment:
       TZ: Etc/UTC
     volumes:
-    - ./xray.conf:/etc/xray/config.json
+    - ./engine.conf:/etc/xray/config.json
     networks:
     - reality"
 fi
@@ -482,7 +484,7 @@ echo "
     environment:
       TZ: Etc/UTC
     volumes:
-    - ./singbox.conf:/etc/sing-box/config.json
+    - ./engine.conf:/etc/sing-box/config.json
     networks:
     - reality"
 fi
@@ -515,10 +517,10 @@ function generate_xray_config {
     fi
     users_object=${users_object}"{\"id\": \"${users[${user}]}\", \"flow\": \"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)\", \"email\": \"${user}\"}"
   done
-  cat >"${config_path}/xray.conf" <<EOF
+  cat >"${engine_file_path}" <<EOF
 {
   "log": {
-    "loglevel": "warning"
+    "loglevel": "error"
   },
   "dns": {
     "servers": [$([[ ${config[safenet]} == ON ]] && echo '"tcp+local://1.1.1.3","tcp+local://1.0.0.3"' || echo '"tcp+local://1.1.1.1","tcp+local://1.0.0.1"')]
@@ -646,10 +648,10 @@ function generate_singbox_config {
     fi
     users_object=${users_object}"{\"uuid\": \"${users[${user}]}\", \"flow\": \"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)\", \"name\": \"${user}\"}"
   done
-  cat >"${config_path}/singbox.conf" <<EOF
+  cat >"${engine_file_path}" <<EOF
 {
   "log": {
-    "level": "warning",
+    "level": "error",
     "timestamp": true
   },
   "dns": {
@@ -771,6 +773,16 @@ function generate_singbox_config {
 EOF
 }
 
+function generate_config {
+  generate_docker_compose
+  if [[ ${config[core]} == "singbox" ]]; then
+    generate_singbox_config
+  fi
+  if [[ ${config[core]} == "xray" ]]; then
+    generate_xray_config
+  fi
+}
+
 function print_client_configuration {
   local username=$1
   local client_config
@@ -794,6 +806,8 @@ function upgrade {
     echo "RealityEZPZ=${uuid}" >> "${users_file_path}"
     sed -i 's/=true/=ON/g; s/=false/=OFF/g' "${users_file_path}"
   fi
+  rm -f "${config_path}/xray.conf"
+  rm -f "${config_path}/singbox.conf"
 }
 
 function main_menu {
@@ -888,6 +902,10 @@ function delete_user_menu {
     username=$(list_users_menu "Delete User")
     if [[ $? -ne 0 ]]; then
       return 0
+    fi
+    if [[ ${#users[@]} -eq 1 ]]; then
+      message_box "Delete User" "You cannot delete the only user.\nAt least one user is needed.\nCreate a new user, then delete this one."
+      continue
     fi
     whiptail \
       --clear \
@@ -1226,6 +1244,31 @@ function restart_docker_compose {
   sudo ${docker_cmd} --project-directory ${config_path} up -d --remove-orphans
 }
 
+function restart_container {
+  if [[ -z "$(sudo ${docker_cmd} --project-directory ${config_path} ls | grep "${compose_file_path}" | grep running || true)" ]]; then
+    restart_docker_compose
+    return
+  fi
+  sudo ${docker_cmd} --project-directory ${config_path} restart "$1"
+}
+
+function check_reload {
+  local new_compose_md5
+  local new_engine_md5
+  generate_config
+  new_compose_md5=$(get_file_md5 "${compose_file_path}")
+  new_engine_md5=$(get_file_md5 "${engine_file_path}")
+  if [[ "${new_compose_md5}" != "${compose_md5}" ]];then
+    compose_md5="${new_compose_md5}"
+    restart_docker_compose
+    return
+  fi
+  if [[ "${new_engine_md5}" != "${engine_md5}" ]];then
+    engine_md5="${new_engine_md5}"
+    restart_container "${config[core]}"
+  fi
+}
+
 function message_box {
   local title=$1
   local message=$2
@@ -1238,13 +1281,22 @@ function message_box {
     3>&1 1>&2 2>&3
 }
 
+function get_file_md5 {
+  file_path=$1
+  md5sum "${file_path}" 2> /dev/null | cut -f1 -d' ' || true
+}
+
 parse_args "$@" || show_help
 config_path="${args[path]}"
 config_file_path="${config_path}/config"
 users_file_path="${config_path}/users"
+compose_file_path="${config_path}/docker-compose.yml"
+engine_file_path="${config_path}/engine.conf"
 install_packages
 install_docker
 upgrade
+compose_md5=$(get_file_md5 "${compose_file_path}")
+engine_md5=$(get_file_md5 "${engine_file_path}")
 parse_config_file
 parse_users_file
 build_config
@@ -1254,20 +1306,10 @@ if [[ ${args[menu]} == 'true' ]]; then
   main_menu
   set -e
 fi
-parse_users_file
-old_compose_file_md5=$(md5sum "${config_path}/docker-compose.yml" 2> /dev/null | cut -f1 -d' ' || true)
-old_xray_file_md5=$(md5sum "${config_path}/xray.conf" 2> /dev/null | cut -f1 -d' ' || true)
-old_singbox_file_md5=$(md5sum "${config_path}/singbox.conf" 2> /dev/null | cut -f1 -d' ' || true)
-generate_docker_compose
-generate_xray_config
-generate_singbox_config
-new_compose_file_md5=$(md5sum "${config_path}/docker-compose.yml" 2> /dev/null | cut -f1 -d' ' || true)
-new_xray_file_md5=$(md5sum "${config_path}/xray.conf" 2> /dev/null | cut -f1 -d' ' || true)
-new_singbox_file_md5=$(md5sum "${config_path}/singbox.conf" 2> /dev/null | cut -f1 -d' ' || true)
-if [[ "${args[restart]}" == "true" || \
-      "${old_compose_file_md5}" != "${new_compose_file_md5}" || \
-      "${old_xray_file_md5}" != "${new_xray_file_md5}" || \
-      "${old_singbox_file_md5}" != "${new_singbox_file_md5}" ]]; then
+if [[ "${args[restart]}" == "true" ]]; then
+  restart_docker_compose
+fi
+if [[ -z "$(sudo ${docker_cmd} --project-directory ${config_path} ls | grep "${compose_file_path}" | grep running || true)" ]]; then
   restart_docker_compose
 fi
 if [[ ${#users[@]} -eq 1 ]]; then
