@@ -64,7 +64,7 @@ Usage: reality-ezpz.sh [-t|--transport=tcp|h2|grpc] [-d|--domain=<domain>] [--re
       --default             Restore default configuration
   -r  --restart             Restart services
   -u, --uninstall           Uninstall reality
-  -p, --path <path>         Absolute path to configuration directory (default: /home/alireza/reality)
+  -p, --path <path>         Absolute path to configuration directory (default: /home/username/reality)
   -s  --enable-safenet      Enable blocking malware and adult content
       --disable-safenet     Disable block malware and adult content
       --port <port>         Server port (default: 443)
