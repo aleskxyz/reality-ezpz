@@ -27,7 +27,7 @@ declare -A users
 default_path="${HOME}/reality"
 xray_image="teddysun/xray:1.8.1"
 warp_image="aleskxyz/warp-svc:1.2"
-singbox_image="gzxhwq/sing-box:v1.3-beta10"
+singbox_image="gzxhwq/sing-box:v1.3-beta12"
 
 BACKTITLE=RealityEZPZ
 MENU="Select an option:"
