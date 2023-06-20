@@ -656,6 +656,7 @@ backend engine
   mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
   server engine engine:8443 check tfo $([[ ${config[transport]} == 'grpc' ]] && echo 'proto h2' || true) $([[ ${config[transport]} == 'http' ]] && echo 'ssl verify none' "$([[ ${config[core]} == sing-box ]] && echo 'proto h2' || true)" || true)
 $([[ ${config[security]} == 'tls-valid' ]] && echo 'backend certbot' || true)
+$([[ ${config[security]} == 'tls-valid' ]] && echo '  mode http' || true)
 $([[ ${config[security]} == 'tls-valid' ]] && echo '  server certbot certbot:80' || true)
 backend default
   mode http
