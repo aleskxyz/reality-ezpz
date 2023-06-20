@@ -430,6 +430,9 @@ function build_config {
   if [[ -n "${args[security]}" && "${args[security]}" != 'reality' && "${config_file[security]}" == 'reality' ]]; then
     config[domain]="${config[server]}"
   fi
+  if [[ -n "${args[server]}" && "${config[security]}" != 'reality' ]]; then
+    config[domain]="${config[server]}"
+  fi
   config[server_ip]=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
   if [[ "${config[natvps]}" == "ON" ]]; then
     natvps_check_port
