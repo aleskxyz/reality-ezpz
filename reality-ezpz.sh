@@ -1713,13 +1713,15 @@ config_path="${args[path]}"
 generate_file_list
 install_packages
 install_docker
-tune_kernel
 upgrade
 parse_config_file
 parse_users_file
 build_config
 update_config_file
 update_users_file
+if [[ ${config[natvps]} == 'OFF' ]]; then
+  tune_kernel
+fi
 if [[ ${args[menu]} == 'true' ]]; then
   set +e
   main_menu
