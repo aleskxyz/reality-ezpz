@@ -649,7 +649,7 @@ frontend http
   bind :80
   $([[ ${config[security]} == 'tls-valid' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
   $([[ ${config[security]} == 'tls-valid' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
-  $([[ ${config[security]} != 'reality' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
+  $([[ ${config[security]} == 'tls-valid' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
   use_backend default
 frontend tls
   bind :443 $([[ ${config[transport]} != 'tcp' ]] && echo 'ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1' || true)
