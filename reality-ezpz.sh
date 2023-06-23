@@ -38,7 +38,7 @@ WIDTH=60
 CHOICE_HEIGHT=20
 
 image[xray]="teddysun/xray:1.8.3"
-image[warp]="aleskxyz/warp-svc:1.2"
+image[warp]="aleskxyz/warp-svc:1.3"
 image[sing-box]="gzxhwq/sing-box:v1.3-rc2"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
