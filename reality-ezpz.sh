@@ -1709,7 +1709,7 @@ net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 net.netfilter.nf_conntrack_max=1000000
 EOF
-  sysctl -qp /etc/sysctl.d/99-reality-ezpz.conf
+  sysctl -qp /etc/sysctl.d/99-reality-ezpz.conf || true
 }
 
 parse_args "$@" || show_help
