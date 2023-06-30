@@ -10,18 +10,18 @@ updater = Updater(token)
 username_regex = re.compile("^[a-zA-Z0-9]+$")
 command = 'bash <(curl -sL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/tgbot/reality-ezpz.sh) --path /opt/reality-ezpz '
 def get_users_ezpz():
-  command += '--list-users'
-  return run_command(command).split('\n')[:-1]
+  local_command = command + '--list-users'
+  return run_command(local_command).split('\n')[:-1]
 def get_config_ezpz(username):
-  command += f'--show-user {username} | grep vless://'
-  return run_command(command)
+  local_command = command + f'--show-user {username} | grep vless://'
+  return run_command(local_command)
 def delete_user_ezpz(username):
-  command += f'--delete-user {username}'
-  run_command(command)
+  local_command = command + f'--delete-user {username}'
+  run_command(local_command)
   return
 def add_user_ezpz(username):
-  command += f'--add-user {username}'
-  run_command(command)
+  local_command = command + f'--add-user {username}'
+  run_command(local_command)
   return
 
 def run_command(command):
