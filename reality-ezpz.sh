@@ -31,6 +31,7 @@ declare -A image
 
 default_path="${HOME}/reality"
 compose_project='reality-ezpz'
+tgbot_project='tgbot'
 BACKTITLE=RealityEZPZ
 MENU="Select an option:"
 HEIGHT=30
@@ -43,6 +44,7 @@ image[sing-box]="gzxhwq/sing-box:v1.3-rc2"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
+image[python]="python:3.11-alpine"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
@@ -54,6 +56,9 @@ defaults[warp_license]=""
 defaults[core]=sing-box
 defaults[security]=reality
 defaults[server]=$(curl -fsSL --ipv4 https://ifconfig.io)
+defaults[tgbot]=OFF
+defaults[tgbot_token]=""
+defaults[tgbot_admins]=""
 
 config_items=(
   "core"
@@ -70,6 +75,9 @@ config_items=(
   "natvps"
   "warp"
   "warp_license"
+  "tgbot"
+  "tgbot_token"
+  "tgbot_admins"
 )
 
 regex[domain]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
@@ -78,6 +86,8 @@ regex[port]="^[1-9][0-9]*$"
 regex[warp_license]="^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}$"
 regex[username]="^[a-zA-Z0-9]+$"
 regex[ip]="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
+regex[tgbot_token]=".+"
+regex[tgbot_admins]=".+"
 
 function show_help {
   echo ""
@@ -102,6 +112,9 @@ function show_help {
   echo "  -c  --core <sing-box|xray> Select core (xray, sing-box, default: ${defaults[core]})"
   echo "      --security <reality|tls-valid|tls-invalid> Select type of TLS encryption (reality, tls-valid, tls-invalid, default: ${defaults[security]})" 
   echo "  -m  --menu                Show menu"
+  echo "      --enable-telegram-bot <true|false> Enable Telegram bot for user management"
+  echo "      --telegram-bot-token <token> Token of Telegram bot"
+  echo "      --telegram-bot-admins <telegram-username> Usernames of telegram bot admins (comma seperated list)"
   echo "      --show-server-config  Print server configuration"
   echo "      --add-user <username> Add new user"
   echo "      --list-users          List all users"
@@ -113,7 +126,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:rup:c:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,path:,enable-safenet:,port:,enable-natvps:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,help -- "$@")
+  opts=$(getopt -o t:d:rup:c:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,path:,enable-safenet:,port:,enable-natvps:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-telegram-bot:,telegram-bot-token:,telegram-bot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -255,6 +268,34 @@ function parse_args {
         args[menu]=true
         shift
         ;;
+      --enable-telegram-bot)
+        case "$2" in
+          true|false)
+            $2 && args[tgbot]=ON || args[tgbot]=OFF
+            shift 2
+            ;;
+          *)
+            echo "Invalid enable-telegram-bot option: $2"
+            return 1
+            ;;
+        esac
+        ;;
+      --telegram-bot-token)
+        args[tgbot_token]="$2"
+        if ! [[ ${args[tgbot_token]} =~ ${regex[tgbot_token]} ]]; then
+          echo "Invalid Telegram Bot Token: ${args[tgbot_token]}"
+          return 1
+        fi
+        shift 2
+        ;;
+      --telegram-bot-admins)
+        args[tgbot_admins]="$2"
+        if ! [[ ${args[tgbot_admins]} =~ ${regex[tgbot_admins]} ]]; then
+          echo "Invalid Telegram Bot admins username: ${args[tgbot_admins]}"
+          return 1
+        fi
+        shift 2
+        ;;
       --show-server-config)
         args[server-config]=true
         shift
@@ -262,7 +303,7 @@ function parse_args {
       --add-user)
         args[add_user]="$2"
         if ! [[ ${args[add_user]} =~ ${regex[username]} ]]; then
-          echo "Invalid username: ${args[warp_license]}\nUsername can only contains A-Z, a-z and 0-9"
+          echo "Invalid username: ${args[add_user]}\nUsername can only contains A-Z, a-z and 0-9"
           return 1
         fi
         shift 2
@@ -433,7 +474,7 @@ function build_config {
   if [[ -n "${args[server]}" && "${config[security]}" != 'reality' ]]; then
     config[domain]="${config[server]}"
   fi
-  config[server_ip]=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
+  config[server_ip]=$(ip route get 1.1.1.1 | grep -oE 'src [0-9.]+' | awk '{print $2}')
   if [[ "${config[natvps]}" == "ON" ]]; then
     natvps_check_port
   fi
@@ -484,8 +525,8 @@ function natvps_check_port {
 function generate_keys {
   local key_pair
   key_pair=$(sudo docker run --rm ${image[xray]} xray x25519)
-  config_file[public_key]=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
-  config_file[private_key]=$(echo "${key_pair}"|grep -oP '(?<=Private key: ).*')
+  config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
+  config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
   config_file[short_id]=$(openssl rand -hex 8)
   config_file[service_path]=$(openssl rand -hex 4)
 }
@@ -494,25 +535,27 @@ function uninstall {
   if docker compose >/dev/null 2>&1; then
     sudo docker compose --project-directory "${args[path]}" down --timeout 2 || true
     sudo docker compose --project-directory "${args[path]}" -p ${compose_project} down --timeout 2 || true
+    sudo docker compose --project-directory "${args[path]}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   elif which docker-compose >/dev/null 2>&1; then
     sudo docker-compose --project-directory "${args[path]}" down --timeout 2 || true
     sudo docker-compose --project-directory "${args[path]}" -p ${compose_project} down --timeout 2 || true
+    sudo docker-compose --project-directory "${args[path]}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   fi
   rm -rf "${args[path]}"
   exit 0
 }
 
 function install_packages {
-  if ! which jq qrencode whiptail >/dev/null 2>&1; then
+  if ! which qrencode whiptail >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
       sudo apt update
-      sudo apt install qrencode jq whiptail -y
+      sudo apt install qrencode whiptail -y
       return 0
     fi
     if which yum >/dev/null 2>&1; then
       sudo yum makecache
       sudo yum install epel-release -y || true
-      sudo yum install qrencode jq whiptail -y
+      sudo yum install qrencode whiptail -y
       return 0
     fi
     echo "OS is not supported!"
@@ -535,7 +578,7 @@ function install_docker {
     docker_cmd="docker-compose"
     return 0
   fi
-  sudo curl -SL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  sudo curl -fsSL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
   sudo chmod +x /usr/local/bin/docker-compose
   docker_cmd="docker-compose"
   return 0
@@ -624,6 +667,21 @@ echo "
       reality:
         ipv4_address: 10.255.255.10"
 fi)
+EOF
+}
+
+function generate_tgbot_compose {
+  cat >"${path[tgbot_compose]}" <<EOF
+version: "3"
+services:
+  tgbot:
+    build: ./
+    restart: always
+    environment:
+      BOT_TOKEN: ${config[tgbot_token]}
+      BOT_ADMIN: ${config[tgbot_admins]}
+    volumes:
+    - ../:/opt/reality-ezpz
 EOF
 }
 
@@ -733,6 +791,20 @@ function generate_certbot_dockerfile {
 FROM ${image[certbot]}
 RUN apk add --no-cache docker-cli-compose curl
 EOF
+}
+
+function generate_tgbot_dockerfile {
+  cat >"${path[tgbot_dockerfile]}" << EOF
+FROM ${image[python]}
+WORKDIR /opt/reality-ezpz/tgbot
+RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode sudo openssl
+RUN pip install --no-cache-dir python-telegram-bot==13.5
+CMD [ "python", "./tgbot.py" ]
+EOF
+}
+
+function download_tgbot_script {
+  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/tgbot/tgbot.py -o "${path[tgbot_script]}"
 }
 
 function generate_selfsigned_certificate {
@@ -1018,6 +1090,12 @@ function generate_config {
     generate_certbot_dockerfile
     generate_certbot_script
   fi
+  if [[ ${config[tgbot]} == "ON" ]]; then
+    mkdir -p "${config_path}/tgbot"
+    generate_tgbot_compose
+    generate_tgbot_dockerfile
+    download_tgbot_script
+  fi
 }
 
 function print_client_configuration {
@@ -1271,6 +1349,9 @@ function restart_menu {
     3>&1 1>&2 2>&3
   if [[ $? -eq 0 ]]; then
     restart_docker_compose
+    if [[ ${config[tgbot]} == 'ON' ]]; then
+      restart_tgbot_compose
+    fi
   fi
 }
 
@@ -1322,9 +1403,12 @@ function configuration_menu {
       "8" "WARP" \
       "9" "WARP+ License" \
       "10" "natvps" \
-      "11" "Restart Services" \
-      "12" "Regenerate Keys" \
-      "13" "Restore Defaults" \
+      "11" "Enable Telegram Bot" \
+      "12" "Telegram Bot Token" \
+      "13" "Telegram Bot Admin" \
+      "14" "Restart Services" \
+      "15" "Regenerate Keys" \
+      "16" "Restore Defaults" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1361,12 +1445,21 @@ function configuration_menu {
         config_natvps_menu
         ;;
       11 )
-        restart_menu
+        config_tgbot_menu
         ;;
       12 )
-        regenerate_menu
+        config_tgbot_token_menu
         ;;
       13 )
+        config_tgbot_admins_menu
+        ;;
+      14 )
+        restart_menu
+        ;;
+      15 )
+        regenerate_menu
+        ;;
+      16 )
         restore_defaults_menu
         ;;
     esac
@@ -1603,9 +1696,72 @@ function config_natvps_menu {
   fi
 }
 
+function config_tgbot_menu {
+  local tgbot
+  tgbot=$(whiptail --clear --backtitle "$BACKTITLE" --title "Enable Telegram Bot" \
+    --checklist --notags "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+    "tgbot" "Enable Telegram Bot" "${config[tgbot]}" \
+    3>&1 1>&2 2>&3)
+  if [[ $? -eq 0 ]]; then
+    config[tgbot]=$([[ $tgbot == '"tgbot"' ]] && echo ON || echo OFF)
+    if [[ ${config[tgbot]} == 'ON' ]]; then
+      config_tgbot_token_menu
+      config_tgbot_admins_menu
+    fi
+    update_config_file
+  fi
+}
+
+function config_tgbot_token_menu {
+  local tgbot_token
+  while true; do
+    tgbot_token=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Token" \
+      --inputbox "Enter Telegram Bot Token:" $HEIGHT $WIDTH "${config[tgbot_token]}" \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      config[tgbot]=OFF
+      update_config_file
+      break
+    fi
+    if [[ ! $tgbot_token =~ ${regex[tgbot_token]} ]]; then
+      message_box "Invalid Input" "Invalid Telegram Bot Token"
+      continue
+    fi
+    config[tgbot_token]=$tgbot_token
+    update_config_file
+    break
+  done
+}
+
+function config_tgbot_admins_menu {
+  local tgbot_admins
+  while true; do
+    tgbot_admins=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Admins" \
+      --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ','):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      config[tgbot]=OFF
+      update_config_file
+      break
+    fi
+    if [[ ! $tgbot_admins =~ ${regex[tgbot_admins]} ]]; then
+      message_box "Invalid Input" "Invalid Telegram Bot Admins"
+      continue
+    fi
+    config[tgbot_admins]=$tgbot_admins
+    update_config_file
+    break
+  done
+}
+
 function restart_docker_compose {
   sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
   sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} up --build -d --remove-orphans --build
+}
+
+function restart_tgbot_compose {
+  sudo ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
+  sudo ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} up --build -d --remove-orphans --build
 }
 
 function restart_container {
@@ -1631,8 +1787,12 @@ function check_reload {
     restart_docker_compose
     return
   fi
+  if [[ "${restart[tgbot]}" == 'true' ]]; then
+    restart_tgbot_compose
+    return
+  fi
   for key in "${!restart[@]}"; do
-    if [[ $key != 'none' ]]; then
+    if [[ $key != 'none' && $key != 'tgbot' ]]; then
       restart_container "${key}"
     fi
   done
@@ -1668,6 +1828,9 @@ function generate_file_list {
   path[server_pem]="${config_path}/certificate/server.pem"
   path[server_key]="${config_path}/certificate/server.key"
   path[server_crt]="${config_path}/certificate/server.crt"
+  path[tgbot_script]="${config_path}/tgbot/tgbot.py"
+  path[tgbot_dockerfile]="${config_path}/tgbot/Dockerfile"
+  path[tgbot_compose]="${config_path}/tgbot/docker-compose.yml"
 
   service[config]='none'
   service[users]='none'
@@ -1680,6 +1843,9 @@ function generate_file_list {
   service[server_pem]='haproxy'
   service[server_key]='engine'
   service[server_crt]='engine'
+  service[tgbot_script]='tgbot'
+  service[tgbot_dockerfile]='compose'
+  service[tgbot_compose]='tgbot'
 
   for key in "${!path[@]}"; do
     md5["$key"]=$(get_md5 "${path[$key]}")
@@ -1733,6 +1899,9 @@ if [[ ${args[menu]} == 'true' ]]; then
 fi
 if [[ ${args[restart]} == 'true' ]]; then
   restart_docker_compose
+  if [[ ${config[tgbot]} == 'ON' ]]; then
+    restart_tgbot_compose
+  fi
 fi
 if [[ -z "$(sudo ${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
   restart_docker_compose
