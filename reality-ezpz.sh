@@ -29,7 +29,7 @@ declare -A md5
 declare -A regex
 declare -A image
 
-default_path="${HOME}/reality"
+default_path="/opt/reality-ezpz"
 compose_project='reality-ezpz'
 tgbot_project='tgbot'
 BACKTITLE=RealityEZPZ
