@@ -681,6 +681,7 @@ services:
       BOT_TOKEN: ${config[tgbot_token]}
       BOT_ADMIN: ${config[tgbot_admins]}
     volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
     - ../:/opt/reality-ezpz
 EOF
 }
