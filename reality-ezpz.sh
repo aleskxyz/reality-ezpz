@@ -1681,19 +1681,23 @@ function config_tgbot_menu {
   local tgbot
   local tgbot_token
   local tgbot_admins
+  local old_tgbot=${config[tgbot]}
+  local old_tgbot_token=${config[tgbot_token]}
+  local old_tgbot_admins=${config[tgbot_admins]}
   while true; do
     tgbot=$(whiptail --clear --backtitle "$BACKTITLE" --title "Enable Telegram Bot" \
       --checklist --notags "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
       "tgbot" "Enable Telegram Bot" "${config[tgbot]}" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
-      return
+      break
     fi
     if [[ $tgbot != '"tgbot"' ]]; then
       config[tgbot]=OFF
       update_config_file
       return
     fi
+    config[tgbot]=ON
     while true; do
       tgbot_token=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Token" \
         --inputbox "Enter Telegram Bot Token:" $HEIGHT $WIDTH "${config[tgbot_token]}" \
@@ -1705,6 +1709,7 @@ function config_tgbot_menu {
         message_box "Invalid Input" "Invalid Telegram Bot Token"
         continue
       fi
+      config[tgbot_token]=$tgbot_token
       while true; do
         tgbot_admins=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Admins" \
           --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ','):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
@@ -1716,14 +1721,15 @@ function config_tgbot_menu {
           message_box "Invalid Input" "Invalid Telegram Bot Admins"
           continue
         fi
-        config[tgbot]=ON
-        config[tgbot_token]=$tgbot_token
         config[tgbot_admins]=$tgbot_admins
         update_config_file
         return
       done
     done
   done
+  config[tgbot]=$old_tgbot
+  config[tgbot_token]=$old_tgbot_token
+  config[tgbot_admins]=$old_tgbot_admins
 }
 
 function restart_docker_compose {
