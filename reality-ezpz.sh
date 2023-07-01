@@ -1391,11 +1391,9 @@ function configuration_menu {
       "9" "WARP+ License" \
       "10" "natvps" \
       "11" "Enable Telegram Bot" \
-      "12" "Telegram Bot Token" \
-      "13" "Telegram Bot Admin" \
-      "14" "Restart Services" \
-      "15" "Regenerate Keys" \
-      "16" "Restore Defaults" \
+      "12" "Restart Services" \
+      "13" "Regenerate Keys" \
+      "14" "Restore Defaults" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
