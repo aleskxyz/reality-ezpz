@@ -29,7 +29,7 @@ declare -A md5
 declare -A regex
 declare -A image
 
-default_path="/opt/reality-ezpz"
+config_path="/opt/reality-ezpz"
 compose_project='reality-ezpz'
 tgbot_project='tgbot'
 BACKTITLE=RealityEZPZ
@@ -81,7 +81,6 @@ config_items=(
 )
 
 regex[domain]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
-regex[path]="^/.*"
 regex[port]="^[1-9][0-9]*$"
 regex[warp_license]="^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}$"
 regex[username]="^[a-zA-Z0-9]+$"
@@ -92,7 +91,7 @@ regex[tgbot_admins]=".+"
 function show_help {
   echo ""
   echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
-  [-r|--restart] [-p|--path=<path>] [--enable-safenet=true|false] [--port=<port>] [--enable-natvps=true|false] [-c|--core=xray|sing-box]
+  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [--enable-natvps=true|false] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|tls-valid|tls-invalid] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
   echo ""
@@ -103,7 +102,6 @@ function show_help {
   echo "      --default             Restore default configuration"
   echo "  -r  --restart             Restart services"
   echo "  -u, --uninstall           Uninstall reality"
-  echo "  -p, --path <path>         Absolute path to configuration directory (default: ${default_path})"
   echo "      --enable-safenet <true|false> Enable or disable safenet (blocking malware and adult content)"
   echo "      --port <port>         Server port (default: ${defaults[port]})"
   echo "      --enable-natvps <true|false> Enable or disable natvps.net support"
@@ -126,7 +124,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:rup:c:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,path:,enable-safenet:,port:,enable-natvps:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-telegram-bot:,telegram-bot-token:,telegram-bot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,enable-natvps:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-telegram-bot:,telegram-bot-token:,telegram-bot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -176,14 +174,6 @@ function parse_args {
       -u|--uninstall)
         args[uninstall]=true
         shift
-        ;;
-      -p|--path)
-        args[path]="$2"
-        if ! [[ ${args[path]} =~ ${regex[path]} ]]; then
-          echo "Use absolute path: ${args[path]}"
-          return 1
-        fi
-        shift 2
         ;;
       --enable-safenet)
         case "$2" in
@@ -333,10 +323,6 @@ function parse_args {
         ;;
     esac
   done
-
-  if [[ -z ${args[path]} ]]; then
-    args[path]="${default_path}"
-  fi
 
   if [[ ${args[uninstall]} == true ]]; then
     uninstall
@@ -524,7 +510,7 @@ function natvps_check_port {
 
 function generate_keys {
   local key_pair
-  key_pair=$(sudo docker run --rm ${image[xray]} xray x25519)
+  key_pair=$(docker run --rm ${image[xray]} xray x25519)
   config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
   config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
   config_file[short_id]=$(openssl rand -hex 8)
@@ -533,29 +519,29 @@ function generate_keys {
 
 function uninstall {
   if docker compose >/dev/null 2>&1; then
-    sudo docker compose --project-directory "${args[path]}" down --timeout 2 || true
-    sudo docker compose --project-directory "${args[path]}" -p ${compose_project} down --timeout 2 || true
-    sudo docker compose --project-directory "${args[path]}/tgbot" -p ${tgbot_project} down --timeout 2 || true
+    docker compose --project-directory "${config_path}" down --timeout 2 || true
+    docker compose --project-directory "${config_path}" -p ${compose_project} down --timeout 2 || true
+    docker compose --project-directory "${config_path}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   elif which docker-compose >/dev/null 2>&1; then
-    sudo docker-compose --project-directory "${args[path]}" down --timeout 2 || true
-    sudo docker-compose --project-directory "${args[path]}" -p ${compose_project} down --timeout 2 || true
-    sudo docker-compose --project-directory "${args[path]}/tgbot" -p ${tgbot_project} down --timeout 2 || true
+    docker-compose --project-directory "${config_path}" down --timeout 2 || true
+    docker-compose --project-directory "${config_path}" -p ${compose_project} down --timeout 2 || true
+    docker-compose --project-directory "${config_path}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   fi
-  rm -rf "${args[path]}"
+  rm -rf "${config_path}"
   exit 0
 }
 
 function install_packages {
   if ! which qrencode whiptail >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
-      sudo apt update
-      sudo apt install qrencode whiptail -y
+      apt update
+      apt install qrencode whiptail -y
       return 0
     fi
     if which yum >/dev/null 2>&1; then
-      sudo yum makecache
-      sudo yum install epel-release -y || true
-      sudo yum install qrencode whiptail -y
+      yum makecache
+      yum install epel-release -y || true
+      yum install qrencode whiptail -y
       return 0
     fi
     echo "OS is not supported!"
@@ -565,8 +551,8 @@ function install_packages {
 
 function install_docker {
   if ! which docker >/dev/null 2>&1; then
-    curl -fsSL https://get.docker.com | sudo bash
-    sudo systemctl enable --now docker
+    curl -fsSL https://get.docker.com | bash
+    systemctl enable --now docker
     docker_cmd="docker compose"
     return 0
   fi
@@ -578,8 +564,8 @@ function install_docker {
     docker_cmd="docker-compose"
     return 0
   fi
-  sudo curl -fsSL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
-  sudo chmod +x /usr/local/bin/docker-compose
+  curl -fsSL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  chmod +x /usr/local/bin/docker-compose
   docker_cmd="docker-compose"
   return 0
 }
@@ -1142,8 +1128,8 @@ function upgrade {
   fi
   rm -f "${config_path}/xray.conf"
   rm -f "${config_path}/singbox.conf"
-  if ! sudo ${docker_cmd} ls | grep ${compose_project} >/dev/null && [[ -r ${path[compose]} ]]; then
-    sudo ${docker_cmd} --project-directory ${config_path} down --remove-orphans --timeout 2
+  if ! ${docker_cmd} ls | grep ${compose_project} >/dev/null && [[ -r ${path[compose]} ]]; then
+    ${docker_cmd} --project-directory ${config_path} down --remove-orphans --timeout 2
   fi
   if [[ -r ${path[config]} ]]; then
     sed -i 's/transport=h2/transport=http/g' "${path[config]}"
@@ -1756,22 +1742,22 @@ function config_tgbot_admins_menu {
 }
 
 function restart_docker_compose {
-  sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
-  sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} up --build -d --remove-orphans --build
+  ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
+  ${docker_cmd} --project-directory ${config_path} -p ${compose_project} up --build -d --remove-orphans --build
 }
 
 function restart_tgbot_compose {
-  sudo ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
-  sudo ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} up --build -d --remove-orphans --build
+  ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
+  ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} up --build -d --remove-orphans --build
 }
 
 function restart_container {
-  if [[ -z "$(sudo ${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
+  if [[ -z "$(${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
     restart_docker_compose
     return
   fi
   if ${docker_cmd} --project-directory ${config_path} -p ${compose_project} ps --services "$1" | grep "$1"; then
-    sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} restart --timeout 2 "$1"
+    ${docker_cmd} --project-directory ${config_path} -p ${compose_project} restart --timeout 2 "$1"
   fi
 }
 
@@ -1880,7 +1866,10 @@ EOF
 }
 
 parse_args "$@" || show_help
-config_path="${args[path]}"
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root."
+    exit 1
+fi
 generate_file_list
 install_packages
 install_docker
@@ -1904,7 +1893,7 @@ if [[ ${args[restart]} == 'true' ]]; then
     restart_tgbot_compose
   fi
 fi
-if [[ -z "$(sudo ${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
+if [[ -z "$(${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
   restart_docker_compose
 fi
 
