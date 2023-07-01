@@ -1435,18 +1435,12 @@ function configuration_menu {
         config_tgbot_menu
         ;;
       12 )
-        config_tgbot_token_menu
-        ;;
-      13 )
-        config_tgbot_admins_menu
-        ;;
-      14 )
         restart_menu
         ;;
-      15 )
+      13 )
         regenerate_menu
         ;;
-      16 )
+      14 )
         restore_defaults_menu
         ;;
     esac
@@ -1685,59 +1679,50 @@ function config_natvps_menu {
 
 function config_tgbot_menu {
   local tgbot
-  tgbot=$(whiptail --clear --backtitle "$BACKTITLE" --title "Enable Telegram Bot" \
-    --checklist --notags "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "tgbot" "Enable Telegram Bot" "${config[tgbot]}" \
-    3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[tgbot]=$([[ $tgbot == '"tgbot"' ]] && echo ON || echo OFF)
-    if [[ ${config[tgbot]} == 'ON' ]]; then
-      config_tgbot_token_menu
-      config_tgbot_admins_menu
-    fi
-    update_config_file
-  fi
-}
-
-function config_tgbot_token_menu {
   local tgbot_token
-  while true; do
-    tgbot_token=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Token" \
-      --inputbox "Enter Telegram Bot Token:" $HEIGHT $WIDTH "${config[tgbot_token]}" \
-      3>&1 1>&2 2>&3)
-    if [[ $? -ne 0 ]]; then
-      config[tgbot]=OFF
-      update_config_file
-      break
-    fi
-    if [[ ! $tgbot_token =~ ${regex[tgbot_token]} ]]; then
-      message_box "Invalid Input" "Invalid Telegram Bot Token"
-      continue
-    fi
-    config[tgbot_token]=$tgbot_token
-    update_config_file
-    break
-  done
-}
-
-function config_tgbot_admins_menu {
   local tgbot_admins
   while true; do
-    tgbot_admins=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Admins" \
-      --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ','):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
+    tgbot=$(whiptail --clear --backtitle "$BACKTITLE" --title "Enable Telegram Bot" \
+      --checklist --notags "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "tgbot" "Enable Telegram Bot" "${config[tgbot]}" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
+      return
+    fi
+    if [[ $tgbot != '"tgbot"' ]]; then
       config[tgbot]=OFF
       update_config_file
-      break
+      return
     fi
-    if [[ ! $tgbot_admins =~ ${regex[tgbot_admins]} ]]; then
-      message_box "Invalid Input" "Invalid Telegram Bot Admins"
-      continue
-    fi
-    config[tgbot_admins]=$tgbot_admins
-    update_config_file
-    break
+    while true; do
+      tgbot_token=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Token" \
+        --inputbox "Enter Telegram Bot Token:" $HEIGHT $WIDTH "${config[tgbot_token]}" \
+        3>&1 1>&2 2>&3)
+      if [[ $? -ne 0 ]]; then
+        break
+      fi
+      if [[ ! $tgbot_token =~ ${regex[tgbot_token]} ]]; then
+        message_box "Invalid Input" "Invalid Telegram Bot Token"
+        continue
+      fi
+      while true; do
+        tgbot_admins=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Admins" \
+          --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ','):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
+          3>&1 1>&2 2>&3)
+        if [[ $? -ne 0 ]]; then
+          break
+        fi
+        if [[ ! $tgbot_admins =~ ${regex[tgbot_admins]} ]]; then
+          message_box "Invalid Input" "Invalid Telegram Bot Admins"
+          continue
+        fi
+        config[tgbot]=ON
+        config[tgbot_token]=$tgbot_token
+        config[tgbot_admins]=$tgbot_admins
+        update_config_file
+        return
+      done
+    done
   done
 }
 
