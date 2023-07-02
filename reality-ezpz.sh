@@ -1433,7 +1433,7 @@ function config_core_menu {
     "sing-box" "$([[ "${config[core]}" == 'sing-box' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
   if [[ $? -ne 0 ]]; then
-  return
+    return
   fi
   config[core]=$core
   update_config_file
@@ -1580,13 +1580,14 @@ function config_port_menu {
 function config_safenet_menu {
   local safenet
   safenet=$(whiptail --clear --backtitle "$BACKTITLE" --title "Safe Internet" \
-    --checklist --notags "Enable blocking malware and adult content" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "safenet" "Enable Safe Internet" "${config[safenet]}" \
+    --radiolist --noitem "Enable blocking malware and adult content" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+    "Enable" "$([[ "${config[safenet]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+    "Disable" "$([[ "${config[safenet]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
   if [[ $? -ne 0 ]]; then
     return
   fi
-  config[safenet]=$([[ $safenet == '"safenet"' ]] && echo ON || echo OFF)
+  config[safenet]=$([[ $safenet == 'Enable' ]] && echo ON || echo OFF)
   update_config_file
 }
 
@@ -1597,13 +1598,14 @@ function config_warp_menu {
   local old_warp_license=${config[warp_license]}
   while true; do
     warp=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP" \
-      --checklist --notags "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-      "warp" "Enable WARP" "${config[warp]}" \
+      --radiolist --noitem "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "Enable" "$([[ "${config[warp]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+      "Disable" "$([[ "${config[warp]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ $warp != '"warp"' ]]; then
+    if [[ $warp == 'Disable' ]]; then
       config[warp]=OFF
       update_config_file
       return
@@ -1638,13 +1640,14 @@ function config_tgbot_menu {
   local old_tgbot_admins=${config[tgbot_admins]}
   while true; do
     tgbot=$(whiptail --clear --backtitle "$BACKTITLE" --title "Enable Telegram Bot" \
-      --checklist --notags "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-      "tgbot" "Enable Telegram Bot" "${config[tgbot]}" \
+      --radiolist --noitem "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "Enable" "$([[ "${config[tgbot]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+      "Disable" "$([[ "${config[tgbot]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ $tgbot != '"tgbot"' ]]; then
+    if [[ $tgbot == 'Disable' ]]; then
       config[tgbot]=OFF
       update_config_file
       return
