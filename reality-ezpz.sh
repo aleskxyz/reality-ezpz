@@ -50,7 +50,6 @@ defaults[transport]=tcp
 defaults[domain]=www.google.com
 defaults[port]=443
 defaults[safenet]=OFF
-defaults[natvps]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
 defaults[core]=sing-box
@@ -72,7 +71,6 @@ config_items=(
   "server"
   "port"
   "safenet"
-  "natvps"
   "warp"
   "warp_license"
   "tgbot"
@@ -91,7 +89,7 @@ regex[tgbot_admins]="^[a-zA-Z][a-zA-Z0-9_]{4,31}(,[a-zA-Z][a-zA-Z0-9_]{4,31})*$"
 function show_help {
   echo ""
   echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
-  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [--enable-natvps=true|false] [-c|--core=xray|sing-box]
+  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|tls-valid|tls-invalid] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
   echo ""
@@ -104,7 +102,6 @@ function show_help {
   echo "  -u, --uninstall           Uninstall reality"
   echo "      --enable-safenet <true|false> Enable or disable safenet (blocking malware and adult content)"
   echo "      --port <port>         Server port (default: ${defaults[port]})"
-  echo "      --enable-natvps <true|false> Enable or disable natvps.net support"
   echo "      --enable-warp <true|false> Enable or disable Cloudflare warp"
   echo "      --warp-license <warp-license> Add Cloudflare warp+ license"
   echo "  -c  --core <sing-box|xray> Select core (xray, sing-box, default: ${defaults[core]})"
@@ -124,7 +121,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,enable-natvps:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-telegram-bot:,telegram-bot-token:,telegram-bot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-telegram-bot:,telegram-bot-token:,telegram-bot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -209,18 +206,6 @@ function parse_args {
           return 1
         fi
         shift 2
-        ;;
-      --enable-natvps)
-        case "$2" in
-          true|false)
-            $2 && args[natvps]=ON || args[natvps]=OFF
-            shift 2
-            ;;
-          *)
-            echo "Invalid natvps option: $2"
-            return 1
-            ;;
-        esac
         ;;
       --warp-license)
         args[warp_license]="$2"
@@ -448,10 +433,6 @@ function build_config {
     echo 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to tls-valid or tls-invalid'
     exit 1
   fi
-  if [[ ${config[security]} == 'tls-valid' && "${config[natvps]}" == "ON" ]]; then
-    echo 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
-    exit 1
-  fi
   if [[ ${config[security]} == 'tls-valid' && ${config[port]} -ne 443 ]]; then
     if lsof -i :80 >/dev/null 2>&1; then
       free_80=false
@@ -477,12 +458,6 @@ function build_config {
     config[domain]="${config[server]}"
   fi
   config[server_ip]=$(ip route get 1.1.1.1 | grep -oE 'src [0-9.]+' | awk '{print $2}')
-  if [[ "${config[natvps]}" == "ON" ]]; then
-    natvps_check_port
-  fi
-  if [[ "${args[natvps]}" == "OFF" ]] && [[ -z ${args[port]} ]] && [[ "${config_file[natvps]}" == "ON" ]]; then
-    config[port]="${defaults[port]}"
-  fi
 }
 
 function update_config_file {
@@ -504,24 +479,6 @@ function update_users_file {
     echo "${user}=${users[${user}]}" >> "${path[users]}"
   done
   check_reload
-}
-
-function natvps_check_port {
-  local first_port
-  local last_port
-  first_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"01
-  last_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"20
-  if ((config[port] >= first_port && config[port] <= last_port)); then
-    return 0
-  fi
-  for port in $(seq "${first_port}" "${last_port}"); do
-    if ! lsof -i :"${port}" >/dev/null; then
-      config[port]=$port
-      return 0
-    fi
-  done
-  echo "Error: Free port was not found."
-  return 1
 }
 
 function generate_keys {
@@ -1340,7 +1297,6 @@ function show_server_config {
   server_config=$server_config$'\n'"Transport: ${config[transport]}"
   server_config=$server_config$'\n'"Security: ${config[security]}"
   server_config=$server_config$'\n'"Safenet: ${config[safenet]}"
-  server_config=$server_config$'\n'"natvps: ${config[natvps]}"
   server_config=$server_config$'\n'"WARP: ${config[warp]}"
   server_config=$server_config$'\n'"WARP License: ${config[warp_license]}"
   server_config=$server_config$'\n'"Telegram Bot: ${config[tgbot]}"
@@ -1420,11 +1376,10 @@ function configuration_menu {
       "6" "Port" \
       "7" "Safe Internet" \
       "8" "WARP" \
-      "9" "natvps" \
-      "10" "Telegram Bot" \
-      "11" "Restart Services" \
-      "12" "Regenerate Keys" \
-      "13" "Restore Defaults" \
+      "9" "Telegram Bot" \
+      "10" "Restart Services" \
+      "11" "Regenerate Keys" \
+      "12" "Restore Defaults" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1455,18 +1410,15 @@ function configuration_menu {
         config_warp_menu
         ;;
       9 )
-        config_natvps_menu
-        ;;
-      10 )
         config_tgbot_menu
         ;;
-      11 )
+      10 )
         restart_menu
         ;;
-      12 )
+      11 )
         regenerate_menu
         ;;
-      13 )
+      12 )
         restore_defaults_menu
         ;;
     esac
@@ -1575,10 +1527,6 @@ function config_security_menu {
       message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "ws" transport protocol. Change TLS certifcate to "tls-valid" or "tls-invalid" or use other transport protocols'
       continue
     fi
-    if [[ "${config[natvps]}" == "ON" && ${security} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
-      continue
-    fi
     if [[ ${security} == 'tls-valid' && ${config[port]} -ne 443 ]]; then
       if lsof -i :80 >/dev/null 2>&1; then
         free_80=false
@@ -1622,16 +1570,6 @@ function config_port_menu {
     if ((port < 1 || port > 65535)); then
       message_box "Invalid Port" "Port must be between 1 to 65535"
       continue
-    fi
-    if [[ ${config[natvps]} == ON ]]; then
-      local first_port
-      local last_port
-      first_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"01
-      last_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"20
-      if ((port < first_port || port > last_port)); then
-        message_box "Invalid Port" "natvps.net is enabled.\nThe port must be between ${first_port} and ${last_port}."
-        continue
-      fi
     fi
     config[port]=$port
     update_config_file
@@ -1689,24 +1627,6 @@ function config_warp_menu {
   done
   config[warp]=$old_warp
   config[warp_license]=$old_warp_license
-}
-
-function config_natvps_menu {
-  local natvps
-  natvps=$(whiptail --clear --backtitle "$BACKTITLE" --title "natvps.net" \
-    --checklist --notags "natvps.net server:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "natvps" "natvps.net server" "${config[natvps]}" \
-    3>&1 1>&2 2>&3)
-  if [[ $? -ne 0 ]]; then
-    return
-  fi
-  if [[ $natvps == '"natvps"' && ${config[security]} == 'tls-valid' ]]; then
-    message_box 'Invalid Configuration' 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
-    return
-  fi
-  config[natvps]=$([[ $natvps == '"natvps"' ]] && echo ON || echo OFF)
-  natvps_check_port
-  update_config_file
 }
 
 function config_tgbot_menu {
@@ -1908,9 +1828,8 @@ parse_users_file
 build_config
 update_config_file
 update_users_file
-if [[ ${config[natvps]} == 'OFF' ]]; then
-  tune_kernel
-fi
+tune_kernel
+
 if [[ ${args[menu]} == 'true' ]]; then
   set +e
   main_menu
