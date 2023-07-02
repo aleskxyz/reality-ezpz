@@ -60,10 +60,10 @@ bash <(curl -sL https://bit.ly/realityez) -m
 And then you will see management menu in your terminal:
 ![image](https://github.com/aleskxyz/reality-ezpz/assets/39186039/a727148c-1a11-4702-80f3-ab8b46d916af)
 
-```
 You can also enable Telegram bot with `--enable-tgbot` option and manage users from with your Telegram bot ([More Info](#telegram-bot))
 ![image](https://github.com/aleskxyz/reality-ezpz/assets/39186039/7e31383a-e00b-426e-9324-6d58f36e7da0)
 
+```
 Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
