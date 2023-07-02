@@ -1805,7 +1805,7 @@ function check_reload {
     restart_tgbot_compose
   fi
   if [[ "${config[tgbot]}" == 'OFF' ]]; then
-    ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
+    ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 >/dev/null 2>&1 || true
   fi
   for key in "${!restart[@]}"; do
     if [[ $key != 'none' && $key != 'tgbot' ]]; then
