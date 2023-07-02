@@ -85,8 +85,8 @@ regex[port]="^[1-9][0-9]*$"
 regex[warp_license]="^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}$"
 regex[username]="^[a-zA-Z0-9]+$"
 regex[ip]="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
-regex[tgbot_token]=".+"
-regex[tgbot_admins]=".+"
+regex[tgbot_token]="^[0-9]{8,10}:[a-zA-Z0-9_-]{35}$"
+regex[tgbot_admins]="^[a-zA-Z][a-zA-Z0-9_]{4,31}(,[a-zA-Z][a-zA-Z0-9_]{4,31})*$"
 
 function show_help {
   echo ""
@@ -112,7 +112,7 @@ function show_help {
   echo "  -m  --menu                Show menu"
   echo "      --enable-telegram-bot <true|false> Enable Telegram bot for user management"
   echo "      --telegram-bot-token <token> Token of Telegram bot"
-  echo "      --telegram-bot-admins <telegram-username> Usernames of telegram bot admins (comma seperated list)"
+  echo "      --telegram-bot-admins <telegram-username> Usernames of telegram bot admins (Comma separated list of usernames without leading '@')"
   echo "      --show-server-config  Print server configuration"
   echo "      --add-user <username> Add new user"
   echo "      --list-users          List all users"
@@ -272,17 +272,21 @@ function parse_args {
         ;;
       --telegram-bot-token)
         args[tgbot_token]="$2"
-        if ! [[ ${args[tgbot_token]} =~ ${regex[tgbot_token]} ]]; then
+        if [[ ! ${args[tgbot_token]} =~ ${regex[tgbot_token]} ]]; then
           echo "Invalid Telegram Bot Token: ${args[tgbot_token]}"
+          return 1
+        fi 
+        if ! curl -sSfL "https://api.telegram.org/bot${args[tgbot_token]}/getMe" >/dev/null 2>&1; then
+          echo "Invalid Telegram Bot Token: Telegram Bot Token is incorrect. Check it again."
           return 1
         fi
         shift 2
         ;;
       --telegram-bot-admins)
         args[tgbot_admins]="$2"
-        if ! [[ ${args[tgbot_admins]} =~ ${regex[tgbot_admins]} ]]; then
-          echo "Invalid Telegram Bot admins username: ${args[tgbot_admins]}"
-          return 1
+        if [[ ! ${args[tgbot_admins]} =~ ${regex[tgbot_admins]} || $tgbot_admins =~ .+_$ || $tgbot_admins =~ .+_,.+ ]]; then
+          echo "Invalid Telegram Bot Admins Username: ${args[tgbot_admins]}\nThe usernames must separated by ',' without leading '@' character or any extra space."
+         return 1
         fi
         shift 2
         ;;
@@ -423,6 +427,18 @@ function build_config {
   if [[ ${args[default]} == true ]]; then
     restore_defaults
     return 0
+  fi
+  if [[ ${config[tgbot]} == 'ON' && -z ${config[tgbot_token]} ]]; then
+    echo 'To enable Telegram bot, you have to give the token of bot with --telegram-bot-token option.'
+    exit 1
+  fi
+  if [[ ${config[tgbot]} == 'ON' && -z ${config[tgbot_admins]} ]]; then
+    echo 'To enable Telegram bot, you have to give the list of authorized Telegram admins username with --telegram-bot-admins option.'
+    exit 1
+  fi
+  if [[ ${config[warp]} == 'ON' && -z ${config[warp_license]} ]]; then
+    echo 'To enable WARP+, you have to give WARP+ license with --warp-license option.'
+    exit 1
   fi
   if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'tls-valid' ]]; then
     echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "tls-valid" as TLS certifcate.'
@@ -1119,6 +1135,10 @@ function print_client_configuration {
 }
 
 function upgrade {
+  if [[ -e "${HOME}/reality/config" ]]; then
+    ${docker_cmd} --project-directory "${HOME}/reality" down --remove-orphans --timeout 2
+    mv -f "${HOME}/reality" /opt/reality-ezpz
+  fi
   local uuid
   uuid=$(grep '^uuid=' "${path[config]}" 2>/dev/null | cut -d= -f2 || true)
   if [[ -n $uuid ]]; then
@@ -1135,6 +1155,11 @@ function upgrade {
     sed -i 's/transport=h2/transport=http/g' "${path[config]}"
     sed -i 's/core=singbox/core=sing-box/g' "${path[config]}"
   fi
+  for key in "${!path[@]}"; do
+    if [[ -d "${path[$key]}" ]]; then
+      rm -rf "${path[$key]}"
+    fi
+  done
 }
 
 function main_menu {
@@ -1388,12 +1413,11 @@ function configuration_menu {
       "6" "Port" \
       "7" "Safe Internet" \
       "8" "WARP" \
-      "9" "WARP+ License" \
-      "10" "natvps" \
-      "11" "Enable Telegram Bot" \
-      "12" "Restart Services" \
-      "13" "Regenerate Keys" \
-      "14" "Restore Defaults" \
+      "9" "natvps" \
+      "10" "Telegram Bot" \
+      "11" "Restart Services" \
+      "12" "Regenerate Keys" \
+      "13" "Restore Defaults" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1424,21 +1448,18 @@ function configuration_menu {
         config_warp_menu
         ;;
       9 )
-        config_warp_license_menu
-        ;;
-      10 )
         config_natvps_menu
         ;;
-      11 )
+      10 )
         config_tgbot_menu
         ;;
-      12 )
+      11 )
         restart_menu
         ;;
-      13 )
+      12 )
         regenerate_menu
         ;;
-      14 )
+      13 )
         restore_defaults_menu
         ;;
     esac
@@ -1624,38 +1645,41 @@ function config_safenet_menu {
 
 function config_warp_menu {
   local warp
-  warp=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP" \
-    --checklist --notags "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "warp" "Enable WARP" "${config[warp]}" \
-    3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[warp]=$([[ $warp == '"warp"' ]] && echo ON || echo OFF)
-    if [[ ${config[warp]} == 'ON' ]]; then
-      config_warp_license_menu
-    fi
-    update_config_file
-  fi
-}
-
-function config_warp_license_menu {
   local warp_license
+  local old_warp=${config[warp]}
+  local old_warp_license=${config[warp_license]}
   while true; do
-    warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
-      --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
+    warp=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP" \
+      --checklist --notags "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "warp" "Enable WARP" "${config[warp]}" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
-      config[warp]=OFF
-      update_config_file
       break
     fi
-    if [[ ! $warp_license =~ ${regex[warp_license]} ]]; then
-      message_box "Invalid Input" "Invalid WARP+ License"
-      continue
+    if [[ $warp != '"warp"' ]]; then
+      config[warp]=OFF
+      update_config_file
+      return
     fi
-    config[warp_license]=$warp_license
-    update_config_file
-    break
+    config[warp]=ON
+    while true; do
+      warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
+        --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
+        3>&1 1>&2 2>&3)
+      if [[ $? -ne 0 ]]; then
+        break
+      fi
+      if [[ ! $warp_license =~ ${regex[warp_license]} ]]; then
+        message_box "Invalid Input" "Invalid WARP+ License"
+        continue
+      fi
+      config[warp_license]=$warp_license
+      update_config_file
+      return
+    done
   done
+  config[warp]=$old_warp
+  config[warp_license]=$old_warp_license
 }
 
 function config_natvps_menu {
@@ -1693,6 +1717,7 @@ function config_tgbot_menu {
     if [[ $tgbot != '"tgbot"' ]]; then
       config[tgbot]=OFF
       update_config_file
+      ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
       return
     fi
     config[tgbot]=ON
@@ -1706,17 +1731,21 @@ function config_tgbot_menu {
       if [[ ! $tgbot_token =~ ${regex[tgbot_token]} ]]; then
         message_box "Invalid Input" "Invalid Telegram Bot Token"
         continue
+      fi 
+      if ! curl -sSfL "https://api.telegram.org/bot${tgbot_token}/getMe" >/dev/null 2>&1; then
+        message_box "Invalid Input" "Telegram Bot Token is incorrect. Check it again."
+        continue
       fi
       config[tgbot_token]=$tgbot_token
       while true; do
         tgbot_admins=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Admins" \
-          --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ','):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
+          --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ',' without leading '@'):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
           3>&1 1>&2 2>&3)
         if [[ $? -ne 0 ]]; then
           break
         fi
-        if [[ ! $tgbot_admins =~ ${regex[tgbot_admins]} ]]; then
-          message_box "Invalid Input" "Invalid Telegram Bot Admins"
+        if [[ ! $tgbot_admins =~ ${regex[tgbot_admins]} || $tgbot_admins =~ .+_$ || $tgbot_admins =~ .+_,.+ ]]; then
+          message_box "Invalid Input" "Invalid Username\nThe usernames must separated by ',' without leading '@' character or any extra space."
           continue
         fi
         config[tgbot_admins]=$tgbot_admins
@@ -1763,7 +1792,7 @@ function check_reload {
     restart_docker_compose
     return
   fi
-  if [[ "${restart[tgbot]}" == 'true' ]]; then
+  if [[ "${restart[tgbot]}" == 'true' && "${config[tgbot]}" == 'ON' ]]; then
     restart_tgbot_compose
     return
   fi
@@ -1885,12 +1914,13 @@ fi
 if [[ -z "$(${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
   restart_docker_compose
 fi
-
+if [[ -z "$(${docker_cmd} ls | grep "${path[tgbot_compose]}" | grep running || true)" && ${config[tgbot]} == 'ON' ]]; then
+  restart_tgbot_compose
+fi
 if [[ ${args[server-config]} == true ]]; then
   show_server_config
   exit 0
 fi
-
 if [[ -n ${args[list_users]} ]]; then
   for user in "${!users[@]}"; do
     echo "${user}"
