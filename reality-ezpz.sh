@@ -29,8 +29,9 @@ declare -A md5
 declare -A regex
 declare -A image
 
-default_path="${HOME}/reality"
+config_path="/opt/reality-ezpz"
 compose_project='reality-ezpz'
+tgbot_project='tgbot'
 BACKTITLE=RealityEZPZ
 MENU="Select an option:"
 HEIGHT=30
@@ -39,21 +40,24 @@ CHOICE_HEIGHT=20
 
 image[xray]="teddysun/xray:1.8.3"
 image[warp]="aleskxyz/warp-svc:1.3"
-image[sing-box]="gzxhwq/sing-box:v1.3-rc2"
+image[sing-box]="gzxhwq/sing-box:v1.3.0"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
+image[python]="python:3.11-alpine"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
 defaults[port]=443
 defaults[safenet]=OFF
-defaults[natvps]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
 defaults[core]=sing-box
 defaults[security]=reality
 defaults[server]=$(curl -fsSL --ipv4 https://ifconfig.io)
+defaults[tgbot]=OFF
+defaults[tgbot_token]=""
+defaults[tgbot_admins]=""
 
 config_items=(
   "core"
@@ -67,41 +71,45 @@ config_items=(
   "server"
   "port"
   "safenet"
-  "natvps"
   "warp"
   "warp_license"
+  "tgbot"
+  "tgbot_token"
+  "tgbot_admins"
 )
 
 regex[domain]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
-regex[path]="^/.*"
 regex[port]="^[1-9][0-9]*$"
 regex[warp_license]="^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}$"
 regex[username]="^[a-zA-Z0-9]+$"
 regex[ip]="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
+regex[tgbot_token]="^[0-9]{8,10}:[a-zA-Z0-9_-]{35}$"
+regex[tgbot_admins]="^[a-zA-Z][a-zA-Z0-9_]{4,31}(,[a-zA-Z][a-zA-Z0-9_]{4,31})*$"
 
 function show_help {
   echo ""
   echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
-  [-r|--restart] [-p|--path=<path>] [--enable-safenet=true|false] [--port=<port>] [--enable-natvps=true|false] [-c|--core=xray|sing-box]
-  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|tls-valid|tls-invalid] [-m|--menu] [--show-server-config] 
+  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
+  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
   echo ""
   echo "  -t, --transport <tcp|http|grpc|ws> Transport protocol (ws, http, grpc, ws, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
-  echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using tls-valid security)"
+  echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
   echo "      --regenerate          Regenerate public and private keys"
   echo "      --default             Restore default configuration"
   echo "  -r  --restart             Restart services"
   echo "  -u, --uninstall           Uninstall reality"
-  echo "  -p, --path <path>         Absolute path to configuration directory (default: ${default_path})"
   echo "      --enable-safenet <true|false> Enable or disable safenet (blocking malware and adult content)"
   echo "      --port <port>         Server port (default: ${defaults[port]})"
-  echo "      --enable-natvps <true|false> Enable or disable natvps.net support"
   echo "      --enable-warp <true|false> Enable or disable Cloudflare warp"
   echo "      --warp-license <warp-license> Add Cloudflare warp+ license"
   echo "  -c  --core <sing-box|xray> Select core (xray, sing-box, default: ${defaults[core]})"
-  echo "      --security <reality|tls-valid|tls-invalid> Select type of TLS encryption (reality, tls-valid, tls-invalid, default: ${defaults[security]})" 
+  echo "      --security <reality|letsencrypt|selfsigned> Select type of TLS encryption (reality, letsencrypt, selfsigned, default: ${defaults[security]})" 
   echo "  -m  --menu                Show menu"
+  echo "      --enable-tgbot <true|false> Enable Telegram bot for user management"
+  echo "      --tgbot-token <token> Token of Telegram bot"
+  echo "      --tgbot-admins <telegram-username> Usernames of telegram bot admins (Comma separated list of usernames without leading '@')"
   echo "      --show-server-config  Print server configuration"
   echo "      --add-user <username> Add new user"
   echo "      --list-users          List all users"
@@ -113,7 +121,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:rup:c:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,path:,enable-safenet:,port:,enable-natvps:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -164,14 +172,6 @@ function parse_args {
         args[uninstall]=true
         shift
         ;;
-      -p|--path)
-        args[path]="$2"
-        if ! [[ ${args[path]} =~ ${regex[path]} ]]; then
-          echo "Use absolute path: ${args[path]}"
-          return 1
-        fi
-        shift 2
-        ;;
       --enable-safenet)
         case "$2" in
           true|false)
@@ -207,18 +207,6 @@ function parse_args {
         fi
         shift 2
         ;;
-      --enable-natvps)
-        case "$2" in
-          true|false)
-            $2 && args[natvps]=ON || args[natvps]=OFF
-            shift 2
-            ;;
-          *)
-            echo "Invalid natvps option: $2"
-            return 1
-            ;;
-        esac
-        ;;
       --warp-license)
         args[warp_license]="$2"
         if ! [[ ${args[warp_license]} =~ ${regex[warp_license]} ]]; then
@@ -242,7 +230,7 @@ function parse_args {
       --security)
         args[security]="$2"
         case ${args[security]} in
-          reality|tls-valid|tls-invalid)
+          reality|letsencrypt|selfsigned)
             shift 2
             ;;
           *)
@@ -255,6 +243,38 @@ function parse_args {
         args[menu]=true
         shift
         ;;
+      --enable-tgbot)
+        case "$2" in
+          true|false)
+            $2 && args[tgbot]=ON || args[tgbot]=OFF
+            shift 2
+            ;;
+          *)
+            echo "Invalid enable-tgbot option: $2"
+            return 1
+            ;;
+        esac
+        ;;
+      --tgbot-token)
+        args[tgbot_token]="$2"
+        if [[ ! ${args[tgbot_token]} =~ ${regex[tgbot_token]} ]]; then
+          echo "Invalid Telegram Bot Token: ${args[tgbot_token]}"
+          return 1
+        fi 
+        if ! curl -sSfL "https://api.telegram.org/bot${args[tgbot_token]}/getMe" >/dev/null 2>&1; then
+          echo "Invalid Telegram Bot Token: Telegram Bot Token is incorrect. Check it again."
+          return 1
+        fi
+        shift 2
+        ;;
+      --tgbot-admins)
+        args[tgbot_admins]="$2"
+        if [[ ! ${args[tgbot_admins]} =~ ${regex[tgbot_admins]} || $tgbot_admins =~ .+_$ || $tgbot_admins =~ .+_,.+ ]]; then
+          echo "Invalid Telegram Bot Admins Username: ${args[tgbot_admins]}\nThe usernames must separated by ',' without leading '@' character or any extra space."
+         return 1
+        fi
+        shift 2
+        ;;
       --show-server-config)
         args[server-config]=true
         shift
@@ -262,7 +282,7 @@ function parse_args {
       --add-user)
         args[add_user]="$2"
         if ! [[ ${args[add_user]} =~ ${regex[username]} ]]; then
-          echo "Invalid username: ${args[warp_license]}\nUsername can only contains A-Z, a-z and 0-9"
+          echo "Invalid username: ${args[add_user]}\nUsername can only contains A-Z, a-z and 0-9"
           return 1
         fi
         shift 2
@@ -292,10 +312,6 @@ function parse_args {
         ;;
     esac
   done
-
-  if [[ -z ${args[path]} ]]; then
-    args[path]="${default_path}"
-  fi
 
   if [[ ${args[uninstall]} == true ]]; then
     uninstall
@@ -397,19 +413,27 @@ function build_config {
     restore_defaults
     return 0
   fi
-  if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'tls-valid' ]]; then
-    echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "tls-valid" as TLS certifcate.'
+  if [[ ${config[tgbot]} == 'ON' && -z ${config[tgbot_token]} ]]; then
+    echo 'To enable Telegram bot, you have to give the token of bot with --tgbot-token option.'
+    exit 1
+  fi
+  if [[ ${config[tgbot]} == 'ON' && -z ${config[tgbot_admins]} ]]; then
+    echo 'To enable Telegram bot, you have to give the list of authorized Telegram admins username with --tgbot-admins option.'
+    exit 1
+  fi
+  if [[ ${config[warp]} == 'ON' && -z ${config[warp_license]} ]]; then
+    echo 'To enable WARP+, you have to give WARP+ license with --warp-license option.'
+    exit 1
+  fi
+  if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'letsencrypt' ]]; then
+    echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "letsencrypt" as TLS certifcate.'
     exit 1
   fi
   if [[ ${config[transport]} == 'ws' && ${config[security]} == 'reality' ]]; then
-    echo 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to tls-valid or tls-invalid'
+    echo 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to letsencrypt or selfsigned'
     exit 1
   fi
-  if [[ ${config[security]} == 'tls-valid' && "${config[natvps]}" == "ON" ]]; then
-    echo 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
-    exit 1
-  fi
-  if [[ ${config[security]} == 'tls-valid' && ${config[port]} -ne 443 ]]; then
+  if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
     if lsof -i :80 >/dev/null 2>&1; then
       free_80=false
       for container in $(${docker_cmd} -p ${compose_project} ps -q); do
@@ -420,7 +444,7 @@ function build_config {
       done
     fi
     if [[ ${free_80} != 'true' ]]; then
-      echo 'Port 80 must be free if you want to use "tls-valid" as the security option.'
+      echo 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
       exit 1
     fi
   fi
@@ -433,13 +457,7 @@ function build_config {
   if [[ -n "${args[server]}" && "${config[security]}" != 'reality' ]]; then
     config[domain]="${config[server]}"
   fi
-  config[server_ip]=$(ip route get 1.1.1.1 | grep -oP '(?<=src )(\d{1,3}\.){3}\d{1,3}')
-  if [[ "${config[natvps]}" == "ON" ]]; then
-    natvps_check_port
-  fi
-  if [[ "${args[natvps]}" == "OFF" ]] && [[ -z ${args[port]} ]] && [[ "${config_file[natvps]}" == "ON" ]]; then
-    config[port]="${defaults[port]}"
-  fi
+  config[server_ip]=$(ip route get 1.1.1.1 | grep -oE 'src [0-9.]+' | awk '{print $2}')
 }
 
 function update_config_file {
@@ -463,56 +481,40 @@ function update_users_file {
   check_reload
 }
 
-function natvps_check_port {
-  local first_port
-  local last_port
-  first_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"01
-  last_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"20
-  if ((config[port] >= first_port && config[port] <= last_port)); then
-    return 0
-  fi
-  for port in $(seq "${first_port}" "${last_port}"); do
-    if ! lsof -i :"${port}" >/dev/null; then
-      config[port]=$port
-      return 0
-    fi
-  done
-  echo "Error: Free port was not found."
-  return 1
-}
-
 function generate_keys {
   local key_pair
-  key_pair=$(sudo docker run --rm ${image[xray]} xray x25519)
-  config_file[public_key]=$(echo "${key_pair}"|grep -oP '(?<=Public key: ).*')
-  config_file[private_key]=$(echo "${key_pair}"|grep -oP '(?<=Private key: ).*')
+  key_pair=$(docker run --rm ${image[xray]} xray x25519)
+  config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
+  config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
   config_file[short_id]=$(openssl rand -hex 8)
   config_file[service_path]=$(openssl rand -hex 4)
 }
 
 function uninstall {
   if docker compose >/dev/null 2>&1; then
-    sudo docker compose --project-directory "${args[path]}" down --timeout 2 || true
-    sudo docker compose --project-directory "${args[path]}" -p ${compose_project} down --timeout 2 || true
+    docker compose --project-directory "${config_path}" down --timeout 2 || true
+    docker compose --project-directory "${config_path}" -p ${compose_project} down --timeout 2 || true
+    docker compose --project-directory "${config_path}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   elif which docker-compose >/dev/null 2>&1; then
-    sudo docker-compose --project-directory "${args[path]}" down --timeout 2 || true
-    sudo docker-compose --project-directory "${args[path]}" -p ${compose_project} down --timeout 2 || true
+    docker-compose --project-directory "${config_path}" down --timeout 2 || true
+    docker-compose --project-directory "${config_path}" -p ${compose_project} down --timeout 2 || true
+    docker-compose --project-directory "${config_path}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   fi
-  rm -rf "${args[path]}"
+  rm -rf "${config_path}"
   exit 0
 }
 
 function install_packages {
-  if ! which jq qrencode whiptail >/dev/null 2>&1; then
+  if ! which qrencode whiptail >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
-      sudo apt update
-      sudo apt install qrencode jq whiptail -y
+      apt update
+      apt install qrencode whiptail -y
       return 0
     fi
     if which yum >/dev/null 2>&1; then
-      sudo yum makecache
-      sudo yum install epel-release -y || true
-      sudo yum install qrencode jq whiptail -y
+      yum makecache
+      yum install epel-release -y || true
+      yum install qrencode whiptail -y
       return 0
     fi
     echo "OS is not supported!"
@@ -522,8 +524,8 @@ function install_packages {
 
 function install_docker {
   if ! which docker >/dev/null 2>&1; then
-    curl -fsSL https://get.docker.com | sudo bash
-    sudo systemctl enable --now docker
+    curl -fsSL https://get.docker.com | bash
+    systemctl enable --now docker
     docker_cmd="docker compose"
     return 0
   fi
@@ -535,8 +537,8 @@ function install_docker {
     docker_cmd="docker-compose"
     return 0
   fi
-  sudo curl -SL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
-  sudo chmod +x /usr/local/bin/docker-compose
+  curl -fsSL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  chmod +x /usr/local/bin/docker-compose
   docker_cmd="docker-compose"
   return 0
 }
@@ -564,8 +566,8 @@ services:
       TZ: Etc/UTC
     volumes:
     - ./${path[engine]#${config_path}/}:/etc/${config[core]}/config.json
-    $([[ ${config[security]} != 'reality' && ${config[transport]} == 'http' || ${config[transport]} == 'tcp' ]] && echo "- ./${path[server_crt]#${config_path}/}:/etc/${config[core]}/server.crt" || true)
-    $([[ ${config[security]} != 'reality' && ${config[transport]} == 'http' || ${config[transport]} == 'tcp' ]] && echo "- ./${path[server_key]#${config_path}/}:/etc/${config[core]}/server.key" || true)
+    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]]; } && echo "- ./${path[server_crt]#${config_path}/}:/etc/${config[core]}/server.crt" || true)
+    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]]; } && echo "- ./${path[server_key]#${config_path}/}:/etc/${config[core]}/server.key" || true)
     networks:
     - reality
 $(if [[ ${config[security]} != 'reality' ]]; then
@@ -580,7 +582,7 @@ echo "
   haproxy:
     image: ${image[haproxy]}
     ports:
-    $([[ ${config[security]} == 'tls-valid' || ${config[port]} -eq 443 ]] && echo '- 80:80' || true)
+    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 443 ]] && echo '- 80:80' || true)
     - ${config[port]}:443
     restart: always
     volumes:
@@ -589,7 +591,7 @@ echo "
     networks:
     - reality"
 fi)
-$(if [[ ${config[security]} == 'tls-valid' ]]; then
+$(if [[ ${config[security]} == 'letsencrypt' ]]; then
 echo "
   certbot:
     build:
@@ -627,6 +629,22 @@ fi)
 EOF
 }
 
+function generate_tgbot_compose {
+  cat >"${path[tgbot_compose]}" <<EOF
+version: "3"
+services:
+  tgbot:
+    build: ./
+    restart: always
+    environment:
+      BOT_TOKEN: ${config[tgbot_token]}
+      BOT_ADMIN: ${config[tgbot_admins]}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ../:/opt/reality-ezpz
+EOF
+}
+
 function generate_haproxy_config {
   cat >"${path[haproxy]}" << EOF
 global
@@ -647,24 +665,24 @@ defaults
 frontend http
   mode http
   bind :80
-  $([[ ${config[security]} == 'tls-valid' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
-  $([[ ${config[security]} == 'tls-valid' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
-  $([[ ${config[security]} == 'tls-valid' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
+  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
+  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
+  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
   use_backend default
 frontend tls
   bind :443 $([[ ${config[transport]} != 'tcp' ]] && echo 'ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1' || true)
   mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
   $([[ ${config[transport]} != 'tcp' ]] && echo "http-request set-header Host ${config[server]}" || true)
-  $([[ ${config[security]} == 'tls-valid' && ${config[transport]} != 'tcp' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
+  $([[ ${config[security]} == 'letsencrypt' && ${config[transport]} != 'tcp' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
   use_backend engine $([[ ${config[transport]} != 'tcp' ]] && echo "if { path_beg /${config[service_path]} }" || true)
   $([[ ${config[transport]} != 'tcp' ]] && echo 'use_backend default' || true)
 backend engine
   retry-on conn-failure empty-response response-timeout
   mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
   server engine engine:8443 check tfo $([[ ${config[transport]} == 'grpc' ]] && echo 'proto h2' || true) $([[ ${config[transport]} == 'http' ]] && echo 'ssl verify none' "$([[ ${config[core]} == sing-box ]] && echo 'proto h2' || true)" || true)
-$([[ ${config[security]} == 'tls-valid' ]] && echo 'backend certbot' || true)
-$([[ ${config[security]} == 'tls-valid' ]] && echo '  mode http' || true)
-$([[ ${config[security]} == 'tls-valid' ]] && echo '  server certbot certbot:80' || true)
+$([[ ${config[security]} == 'letsencrypt' ]] && echo 'backend certbot' || true)
+$([[ ${config[security]} == 'letsencrypt' ]] && echo '  mode http' || true)
+$([[ ${config[security]} == 'letsencrypt' ]] && echo '  server certbot certbot:80' || true)
 backend default
   mode http
   server nginx nginx:80
@@ -733,6 +751,20 @@ function generate_certbot_dockerfile {
 FROM ${image[certbot]}
 RUN apk add --no-cache docker-cli-compose curl
 EOF
+}
+
+function generate_tgbot_dockerfile {
+  cat >"${path[tgbot_dockerfile]}" << EOF
+FROM ${image[python]}
+WORKDIR /opt/reality-ezpz/tgbot
+RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode sudo openssl
+RUN pip install --no-cache-dir python-telegram-bot==13.5
+CMD [ "python", "./tgbot.py" ]
+EOF
+}
+
+function download_tgbot_script {
+  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/tgbot.py -o "${path[tgbot_script]}"
 }
 
 function generate_selfsigned_certificate {
@@ -1012,11 +1044,17 @@ function generate_config {
       generate_selfsigned_certificate
     fi
   fi
-  if [[ ${config[security]} == "tls-valid" ]]; then
+  if [[ ${config[security]} == "letsencrypt" ]]; then
     mkdir -p "${config_path}/certbot"
     generate_certbot_deployhook
     generate_certbot_dockerfile
     generate_certbot_script
+  fi
+  if [[ ${config[tgbot]} == "ON" ]]; then
+    mkdir -p "${config_path}/tgbot"
+    generate_tgbot_compose
+    generate_tgbot_dockerfile
+    download_tgbot_script
   fi
 }
 
@@ -1054,6 +1092,10 @@ function print_client_configuration {
 }
 
 function upgrade {
+  if [[ -e "${HOME}/reality/config" ]]; then
+    ${docker_cmd} --project-directory "${HOME}/reality" down --remove-orphans --timeout 2
+    mv -f "${HOME}/reality" /opt/reality-ezpz
+  fi
   local uuid
   uuid=$(grep '^uuid=' "${path[config]}" 2>/dev/null | cut -d= -f2 || true)
   if [[ -n $uuid ]]; then
@@ -1063,13 +1105,20 @@ function upgrade {
   fi
   rm -f "${config_path}/xray.conf"
   rm -f "${config_path}/singbox.conf"
-  if ! sudo ${docker_cmd} ls | grep ${compose_project} >/dev/null && [[ -r ${path[compose]} ]]; then
-    sudo ${docker_cmd} --project-directory ${config_path} down --remove-orphans --timeout 2
+  if ! ${docker_cmd} ls | grep ${compose_project} >/dev/null && [[ -r ${path[compose]} ]]; then
+    ${docker_cmd} --project-directory ${config_path} down --remove-orphans --timeout 2
   fi
   if [[ -r ${path[config]} ]]; then
     sed -i 's/transport=h2/transport=http/g' "${path[config]}"
     sed -i 's/core=singbox/core=sing-box/g' "${path[config]}"
+    sed -i 's/security=tls-invalid/security=selfsigned/g' "${path[config]}"
+    sed -i 's/security=tls-valid/security=letsencrypt/g' "${path[config]}"
   fi
+  for key in "${!path[@]}"; do
+    if [[ -d "${path[$key]}" ]]; then
+      rm -rf "${path[$key]}"
+    fi
+  done
 }
 
 function main_menu {
@@ -1166,11 +1215,12 @@ function delete_user_menu {
       --yesno "Are you sure you want to delete $username?" \
       $HEIGHT $WIDTH \
       3>&1 1>&2 2>&3
-    if [[ $? -eq 0 ]]; then
-      unset users["${username}"]
-      update_users_file
-      message_box "Delete User" 'User "'"${username}"'" has been deleted.'
+    if [[ $? -ne 0 ]]; then
+      continue
     fi
+    unset users["${username}"]
+    update_users_file
+    message_box "Delete User" 'User "'"${username}"'" has been deleted.'
   done
 }
 
@@ -1220,9 +1270,9 @@ $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" 
       echo "Press Enter to return ..."
       read
     fi
-  if [[ $# -gt 0 ]]; then
-    return 0
-  fi
+    if [[ $# -gt 0 ]]; then
+      return 0
+    fi
   done
 }
 
@@ -1249,9 +1299,11 @@ function show_server_config {
   server_config=$server_config$'\n'"Transport: ${config[transport]}"
   server_config=$server_config$'\n'"Security: ${config[security]}"
   server_config=$server_config$'\n'"Safenet: ${config[safenet]}"
-  server_config=$server_config$'\n'"natvps: ${config[natvps]}"
   server_config=$server_config$'\n'"WARP: ${config[warp]}"
   server_config=$server_config$'\n'"WARP License: ${config[warp_license]}"
+  server_config=$server_config$'\n'"Telegram Bot: ${config[tgbot]}"
+  server_config=$server_config$'\n'"Telegram Bot Token: ${config[tgbot_token]}"
+  server_config=$server_config$'\n'"Telegram Bot Admins: ${config[tgbot_admins]}"
   echo "${server_config}"
 }
 
@@ -1269,8 +1321,12 @@ function restart_menu {
     --yesno "Are you sure to restart services?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  if [[ $? -eq 0 ]]; then
-    restart_docker_compose
+  if [[ $? -ne 0 ]]; then
+    return
+  fi
+  restart_docker_compose
+  if [[ ${config[tgbot]} == 'ON' ]]; then
+    restart_tgbot_compose
   fi
 }
 
@@ -1282,14 +1338,15 @@ function regenerate_menu {
     --yesno "Are you sure to regenerate keys?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  if [[ $? -eq 0 ]]; then
-    generate_keys
-    config[public_key]=${config_file[public_key]}
-    config[private_key]=${config_file[private_key]}
-    config[short_id]=${config_file[short_id]}
-    update_config_file
-    message_box "Regenerate keys" "All keys has been regenerated."
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  generate_keys
+  config[public_key]=${config_file[public_key]}
+  config[private_key]=${config_file[private_key]}
+  config[short_id]=${config_file[short_id]}
+  update_config_file
+  message_box "Regenerate keys" "All keys has been regenerated."
 }
 
 function restore_defaults_menu {
@@ -1300,11 +1357,12 @@ function restore_defaults_menu {
     --yesno "Are you sure to restore default configuration?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  if [[ $? -eq 0 ]]; then
-    restore_defaults
-    update_config_file
-    message_box "Restore Default Config" "All configurations has been restored to them defaults."
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  restore_defaults
+  update_config_file
+  message_box "Restore Default Config" "All configurations has been restored to them defaults."
 }
 
 function configuration_menu {
@@ -1320,11 +1378,10 @@ function configuration_menu {
       "6" "Port" \
       "7" "Safe Internet" \
       "8" "WARP" \
-      "9" "WARP+ License" \
-      "10" "natvps" \
-      "11" "Restart Services" \
-      "12" "Regenerate Keys" \
-      "13" "Restore Defaults" \
+      "9" "Telegram Bot" \
+      "10" "Restart Services" \
+      "11" "Regenerate Keys" \
+      "12" "Restore Defaults" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1355,18 +1412,15 @@ function configuration_menu {
         config_warp_menu
         ;;
       9 )
-        config_warp_license_menu
+        config_tgbot_menu
         ;;
       10 )
-        config_natvps_menu
-        ;;
-      11 )
         restart_menu
         ;;
-      12 )
+      11 )
         regenerate_menu
         ;;
-      13 )
+      12 )
         restore_defaults_menu
         ;;
     esac
@@ -1380,10 +1434,11 @@ function config_core_menu {
     "xray" "$([[ "${config[core]}" == 'xray' ]] && echo 'on' || echo 'off')" \
     "sing-box" "$([[ "${config[core]}" == 'sing-box' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[core]=$core
-    update_config_file
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  config[core]=$core
+  update_config_file
 }
 
 function config_server_menu {
@@ -1395,8 +1450,8 @@ function config_server_menu {
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ ! ${server} =~ ${regex[domain]} && ${config[security]} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "tls-valid" certificate.'
+    if [[ ! ${server} =~ ${regex[domain]} && ${config[security]} == 'letsencrypt' ]]; then
+      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "letsencrypt" certificate.'
       continue
     fi
     if [[ -z ${server} ]]; then
@@ -1425,7 +1480,7 @@ function config_transport_menu {
       break
     fi
     if [[ ${transport} == 'ws' && ${config[security]} == 'reality' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "tls-valid" or "tls-invalid"'
+      message_box 'Invalid Configuration' 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "letsencrypt" or "selfsigned"'
       continue
     fi
     config[transport]=$transport
@@ -1460,25 +1515,21 @@ function config_security_menu {
     security=$(whiptail --clear --backtitle "$BACKTITLE" --title "Security Type" \
       --radiolist --noitem "Select a security type:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
       "reality" "$([[ "${config[security]}" == 'reality' ]] && echo 'on' || echo 'off')" \
-      "tls-valid" "$([[ "${config[security]}" == 'tls-valid' ]] && echo 'on' || echo 'off')" \
-      "tls-invalid" "$([[ "${config[security]}" == 'tls-invalid' ]] && echo 'on' || echo 'off')" \
+      "letsencrypt" "$([[ "${config[security]}" == 'letsencrypt' ]] && echo 'on' || echo 'off')" \
+      "selfsigned" "$([[ "${config[security]}" == 'selfsigned' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ ! ${config[server]} =~ ${regex[domain]} && ${security} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "tls-valid" as security type'
+    if [[ ! ${config[server]} =~ ${regex[domain]} && ${security} == 'letsencrypt' ]]; then
+      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "letsencrypt" as security type'
       continue
     fi
     if [[ ${config[transport]} == 'ws' && ${security} == 'reality' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "ws" transport protocol. Change TLS certifcate to "tls-valid" or "tls-invalid" or use other transport protocols'
+      message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "ws" transport protocol. Change TLS certifcate to "letsencrypt" or "selfsigned" or use other transport protocols'
       continue
     fi
-    if [[ "${config[natvps]}" == "ON" && ${security} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
-      continue
-    fi
-    if [[ ${security} == 'tls-valid' && ${config[port]} -ne 443 ]]; then
+    if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
       if lsof -i :80 >/dev/null 2>&1; then
         free_80=false
         for container in $(${docker_cmd} -p ${compose_project} ps -q); do
@@ -1489,7 +1540,7 @@ function config_security_menu {
         done
       fi
       if [[ ${free_80} != 'true' ]]; then
-        message_box 'Port 80 must be free if you want to use "tls-valid" as the security option.'
+        message_box 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
         continue
       fi
     fi
@@ -1500,7 +1551,7 @@ function config_security_menu {
       config[domain]="${defaults[domain]}"
     fi
     config[security]="${security}"
-    update_config_file 
+    update_config_file
     break
   done
 }
@@ -1522,16 +1573,6 @@ function config_port_menu {
       message_box "Invalid Port" "Port must be between 1 to 65535"
       continue
     fi
-    if [[ ${config[natvps]} == ON ]]; then
-      local first_port
-      local last_port
-      first_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"01
-      last_port="$(echo "${config[server_ip]}" | awk -F. '{print $4}')"20
-      if ((port < first_port || port > last_port)); then
-        message_box "Invalid Port" "natvps.net is enabled.\nThe port must be between ${first_port} and ${last_port}."
-        continue
-      fi
-    fi
     config[port]=$port
     update_config_file
     break
@@ -1541,80 +1582,134 @@ function config_port_menu {
 function config_safenet_menu {
   local safenet
   safenet=$(whiptail --clear --backtitle "$BACKTITLE" --title "Safe Internet" \
-    --checklist --notags "Enable blocking malware and adult content" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "safenet" "Enable Safe Internet" "${config[safenet]}" \
+    --radiolist --noitem "Enable blocking malware and adult content" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+    "Enable" "$([[ "${config[safenet]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+    "Disable" "$([[ "${config[safenet]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[safenet]=$([[ $safenet == '"safenet"' ]] && echo ON || echo OFF)
-    update_config_file
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  config[safenet]=$([[ $safenet == 'Enable' ]] && echo ON || echo OFF)
+  update_config_file
 }
 
 function config_warp_menu {
   local warp
-  warp=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP" \
-    --checklist --notags "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "warp" "Enable WARP" "${config[warp]}" \
-    3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[warp]=$([[ $warp == '"warp"' ]] && echo ON || echo OFF)
-    if [[ ${config[warp]} == 'ON' ]]; then
-      config_warp_license_menu
-    fi
-    update_config_file
-  fi
-}
-
-function config_warp_license_menu {
   local warp_license
+  local old_warp=${config[warp]}
+  local old_warp_license=${config[warp_license]}
   while true; do
-    warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
-      --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
+    warp=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP" \
+      --radiolist --noitem "Enable WARP:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "Enable" "$([[ "${config[warp]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+      "Disable" "$([[ "${config[warp]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
-      config[warp]=OFF
-      update_config_file
       break
     fi
-    if [[ ! $warp_license =~ ${regex[warp_license]} ]]; then
-      message_box "Invalid Input" "Invalid WARP+ License"
-      continue
-    fi
-    config[warp_license]=$warp_license
-    update_config_file
-    break
-  done
-}
-
-function config_natvps_menu {
-  local natvps
-  natvps=$(whiptail --clear --backtitle "$BACKTITLE" --title "natvps.net" \
-    --checklist --notags "natvps.net server:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "natvps" "natvps.net server" "${config[natvps]}" \
-    3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    if [[ $natvps == '"natvps"' && ${config[security]} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
+    if [[ $warp == 'Disable' ]]; then
+      config[warp]=OFF
+      update_config_file
       return
     fi
-    config[natvps]=$([[ $natvps == '"natvps"' ]] && echo ON || echo OFF)
-    natvps_check_port
-    update_config_file
-  fi
+    config[warp]=ON
+    while true; do
+      warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
+        --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
+        3>&1 1>&2 2>&3)
+      if [[ $? -ne 0 ]]; then
+        break
+      fi
+      if [[ ! $warp_license =~ ${regex[warp_license]} ]]; then
+        message_box "Invalid Input" "Invalid WARP+ License"
+        continue
+      fi
+      config[warp_license]=$warp_license
+      update_config_file
+      return
+    done
+  done
+  config[warp]=$old_warp
+  config[warp_license]=$old_warp_license
+}
+
+function config_tgbot_menu {
+  local tgbot
+  local tgbot_token
+  local tgbot_admins
+  local old_tgbot=${config[tgbot]}
+  local old_tgbot_token=${config[tgbot_token]}
+  local old_tgbot_admins=${config[tgbot_admins]}
+  while true; do
+    tgbot=$(whiptail --clear --backtitle "$BACKTITLE" --title "Enable Telegram Bot" \
+      --radiolist --noitem "Enable Telegram Bot:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "Enable" "$([[ "${config[tgbot]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+      "Disable" "$([[ "${config[tgbot]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      break
+    fi
+    if [[ $tgbot == 'Disable' ]]; then
+      config[tgbot]=OFF
+      update_config_file
+      return
+    fi
+    config[tgbot]=ON
+    while true; do
+      tgbot_token=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Token" \
+        --inputbox "Enter Telegram Bot Token:" $HEIGHT $WIDTH "${config[tgbot_token]}" \
+        3>&1 1>&2 2>&3)
+      if [[ $? -ne 0 ]]; then
+        break
+      fi
+      if [[ ! $tgbot_token =~ ${regex[tgbot_token]} ]]; then
+        message_box "Invalid Input" "Invalid Telegram Bot Token"
+        continue
+      fi 
+      if ! curl -sSfL "https://api.telegram.org/bot${tgbot_token}/getMe" >/dev/null 2>&1; then
+        message_box "Invalid Input" "Telegram Bot Token is incorrect. Check it again."
+        continue
+      fi
+      config[tgbot_token]=$tgbot_token
+      while true; do
+        tgbot_admins=$(whiptail --clear --backtitle "$BACKTITLE" --title "Telegram Bot Admins" \
+          --inputbox "Enter Telegram Bot Admins (Seperate multiple admins by comma ',' without leading '@'):" $HEIGHT $WIDTH "${config[tgbot_admins]}" \
+          3>&1 1>&2 2>&3)
+        if [[ $? -ne 0 ]]; then
+          break
+        fi
+        if [[ ! $tgbot_admins =~ ${regex[tgbot_admins]} || $tgbot_admins =~ .+_$ || $tgbot_admins =~ .+_,.+ ]]; then
+          message_box "Invalid Input" "Invalid Username\nThe usernames must separated by ',' without leading '@' character or any extra space."
+          continue
+        fi
+        config[tgbot_admins]=$tgbot_admins
+        update_config_file
+        return
+      done
+    done
+  done
+  config[tgbot]=$old_tgbot
+  config[tgbot_token]=$old_tgbot_token
+  config[tgbot_admins]=$old_tgbot_admins
 }
 
 function restart_docker_compose {
-  sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
-  sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} up --build -d --remove-orphans --build
+  ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
+  ${docker_cmd} --project-directory ${config_path} -p ${compose_project} up --build -d --remove-orphans --build
+}
+
+function restart_tgbot_compose {
+  ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
+  ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} up --build -d --remove-orphans --build
 }
 
 function restart_container {
-  if [[ -z "$(sudo ${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
+  if [[ -z "$(${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
     restart_docker_compose
     return
   fi
   if ${docker_cmd} --project-directory ${config_path} -p ${compose_project} ps --services "$1" | grep "$1"; then
-    sudo ${docker_cmd} --project-directory ${config_path} -p ${compose_project} restart --timeout 2 "$1"
+    ${docker_cmd} --project-directory ${config_path} -p ${compose_project} restart --timeout 2 "$1"
   fi
 }
 
@@ -1631,8 +1726,14 @@ function check_reload {
     restart_docker_compose
     return
   fi
+  if [[ "${restart[tgbot]}" == 'true' && "${config[tgbot]}" == 'ON' ]]; then
+    restart_tgbot_compose
+  fi
+  if [[ "${config[tgbot]}" == 'OFF' ]]; then
+    ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 >/dev/null 2>&1 || true
+  fi
   for key in "${!restart[@]}"; do
-    if [[ $key != 'none' ]]; then
+    if [[ $key != 'none' && $key != 'tgbot' ]]; then
       restart_container "${key}"
     fi
   done
@@ -1668,6 +1769,9 @@ function generate_file_list {
   path[server_pem]="${config_path}/certificate/server.pem"
   path[server_key]="${config_path}/certificate/server.key"
   path[server_crt]="${config_path}/certificate/server.crt"
+  path[tgbot_script]="${config_path}/tgbot/tgbot.py"
+  path[tgbot_dockerfile]="${config_path}/tgbot/Dockerfile"
+  path[tgbot_compose]="${config_path}/tgbot/docker-compose.yml"
 
   service[config]='none'
   service[users]='none'
@@ -1680,6 +1784,9 @@ function generate_file_list {
   service[server_pem]='haproxy'
   service[server_key]='engine'
   service[server_crt]='engine'
+  service[tgbot_script]='tgbot'
+  service[tgbot_dockerfile]='compose'
+  service[tgbot_compose]='tgbot'
 
   for key in "${!path[@]}"; do
     md5["$key"]=$(get_md5 "${path[$key]}")
@@ -1713,7 +1820,10 @@ EOF
 }
 
 parse_args "$@" || show_help
-config_path="${args[path]}"
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root."
+    exit 1
+fi
 generate_file_list
 install_packages
 install_docker
@@ -1723,9 +1833,8 @@ parse_users_file
 build_config
 update_config_file
 update_users_file
-if [[ ${config[natvps]} == 'OFF' ]]; then
-  tune_kernel
-fi
+tune_kernel
+
 if [[ ${args[menu]} == 'true' ]]; then
   set +e
   main_menu
@@ -1733,16 +1842,20 @@ if [[ ${args[menu]} == 'true' ]]; then
 fi
 if [[ ${args[restart]} == 'true' ]]; then
   restart_docker_compose
+  if [[ ${config[tgbot]} == 'ON' ]]; then
+    restart_tgbot_compose
+  fi
 fi
-if [[ -z "$(sudo ${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
+if [[ -z "$(${docker_cmd} ls | grep "${path[compose]}" | grep running || true)" ]]; then
   restart_docker_compose
 fi
-
+if [[ -z "$(${docker_cmd} ls | grep "${path[tgbot_compose]}" | grep running || true)" && ${config[tgbot]} == 'ON' ]]; then
+  restart_tgbot_compose
+fi
 if [[ ${args[server-config]} == true ]]; then
   show_server_config
   exit 0
 fi
-
 if [[ -n ${args[list_users]} ]]; then
   for user in "${!users[@]}"; do
     echo "${user}"
