@@ -1256,11 +1256,12 @@ function delete_user_menu {
       --yesno "Are you sure you want to delete $username?" \
       $HEIGHT $WIDTH \
       3>&1 1>&2 2>&3
-    if [[ $? -eq 0 ]]; then
-      unset users["${username}"]
-      update_users_file
-      message_box "Delete User" 'User "'"${username}"'" has been deleted.'
+    if [[ $? -ne 0 ]]; then
+      continue
     fi
+    unset users["${username}"]
+    update_users_file
+    message_box "Delete User" 'User "'"${username}"'" has been deleted.'
   done
 }
 
@@ -1310,9 +1311,9 @@ $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" 
       echo "Press Enter to return ..."
       read
     fi
-  if [[ $# -gt 0 ]]; then
-    return 0
-  fi
+    if [[ $# -gt 0 ]]; then
+      return 0
+    fi
   done
 }
 
@@ -1342,6 +1343,9 @@ function show_server_config {
   server_config=$server_config$'\n'"natvps: ${config[natvps]}"
   server_config=$server_config$'\n'"WARP: ${config[warp]}"
   server_config=$server_config$'\n'"WARP License: ${config[warp_license]}"
+  server_config=$server_config$'\n'"Telegram Bot: ${config[tgbot]}"
+  server_config=$server_config$'\n'"Telegram Bot Token: ${config[tgbot_token]}"
+  server_config=$server_config$'\n'"Telegram Bot Admins: ${config[tgbot_admins]}"
   echo "${server_config}"
 }
 
@@ -1359,11 +1363,12 @@ function restart_menu {
     --yesno "Are you sure to restart services?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  if [[ $? -eq 0 ]]; then
-    restart_docker_compose
-    if [[ ${config[tgbot]} == 'ON' ]]; then
-      restart_tgbot_compose
-    fi
+  if [[ $? -ne 0 ]]; then
+    return
+  fi
+  restart_docker_compose
+  if [[ ${config[tgbot]} == 'ON' ]]; then
+    restart_tgbot_compose
   fi
 }
 
@@ -1375,14 +1380,15 @@ function regenerate_menu {
     --yesno "Are you sure to regenerate keys?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  if [[ $? -eq 0 ]]; then
-    generate_keys
-    config[public_key]=${config_file[public_key]}
-    config[private_key]=${config_file[private_key]}
-    config[short_id]=${config_file[short_id]}
-    update_config_file
-    message_box "Regenerate keys" "All keys has been regenerated."
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  generate_keys
+  config[public_key]=${config_file[public_key]}
+  config[private_key]=${config_file[private_key]}
+  config[short_id]=${config_file[short_id]}
+  update_config_file
+  message_box "Regenerate keys" "All keys has been regenerated."
 }
 
 function restore_defaults_menu {
@@ -1393,11 +1399,12 @@ function restore_defaults_menu {
     --yesno "Are you sure to restore default configuration?" \
     $HEIGHT $WIDTH \
     3>&1 1>&2 2>&3
-  if [[ $? -eq 0 ]]; then
-    restore_defaults
-    update_config_file
-    message_box "Restore Default Config" "All configurations has been restored to them defaults."
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  restore_defaults
+  update_config_file
+  message_box "Restore Default Config" "All configurations has been restored to them defaults."
 }
 
 function configuration_menu {
@@ -1473,10 +1480,11 @@ function config_core_menu {
     "xray" "$([[ "${config[core]}" == 'xray' ]] && echo 'on' || echo 'off')" \
     "sing-box" "$([[ "${config[core]}" == 'sing-box' ]] && echo 'on' || echo 'off')" \
     3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[core]=$core
-    update_config_file
+  if [[ $? -ne 0 ]]; then
+  return
   fi
+  config[core]=$core
+  update_config_file
 }
 
 function config_server_menu {
@@ -1593,7 +1601,7 @@ function config_security_menu {
       config[domain]="${defaults[domain]}"
     fi
     config[security]="${security}"
-    update_config_file 
+    update_config_file
     break
   done
 }
@@ -1637,10 +1645,11 @@ function config_safenet_menu {
     --checklist --notags "Enable blocking malware and adult content" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "safenet" "Enable Safe Internet" "${config[safenet]}" \
     3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    config[safenet]=$([[ $safenet == '"safenet"' ]] && echo ON || echo OFF)
-    update_config_file
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  config[safenet]=$([[ $safenet == '"safenet"' ]] && echo ON || echo OFF)
+  update_config_file
 }
 
 function config_warp_menu {
@@ -1688,15 +1697,16 @@ function config_natvps_menu {
     --checklist --notags "natvps.net server:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
     "natvps" "natvps.net server" "${config[natvps]}" \
     3>&1 1>&2 2>&3)
-  if [[ $? -eq 0 ]]; then
-    if [[ $natvps == '"natvps"' && ${config[security]} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
-      return
-    fi
-    config[natvps]=$([[ $natvps == '"natvps"' ]] && echo ON || echo OFF)
-    natvps_check_port
-    update_config_file
+  if [[ $? -ne 0 ]]; then
+    return
   fi
+  if [[ $natvps == '"natvps"' && ${config[security]} == 'tls-valid' ]]; then
+    message_box 'Invalid Configuration' 'You cannot use "tls-valid" certificate with "natvps". Use reality or tls-invalid'
+    return
+  fi
+  config[natvps]=$([[ $natvps == '"natvps"' ]] && echo ON || echo OFF)
+  natvps_check_port
+  update_config_file
 }
 
 function config_tgbot_menu {
