@@ -1727,7 +1727,6 @@ function config_tgbot_menu {
     if [[ $tgbot != '"tgbot"' ]]; then
       config[tgbot]=OFF
       update_config_file
-      ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
       return
     fi
     config[tgbot]=ON
@@ -1804,7 +1803,9 @@ function check_reload {
   fi
   if [[ "${restart[tgbot]}" == 'true' && "${config[tgbot]}" == 'ON' ]]; then
     restart_tgbot_compose
-    return
+  fi
+  if [[ "${config[tgbot]}" == 'OFF' ]]; then
+    ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 || true
   fi
   for key in "${!restart[@]}"; do
     if [[ $key != 'none' && $key != 'tgbot' ]]; then
