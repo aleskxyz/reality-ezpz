@@ -40,7 +40,7 @@ CHOICE_HEIGHT=20
 
 image[xray]="teddysun/xray:1.8.3"
 image[warp]="aleskxyz/warp-svc:1.3"
-image[sing-box]="gzxhwq/sing-box:v1.3-rc2"
+image[sing-box]="gzxhwq/sing-box:v1.3.0"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
@@ -90,12 +90,12 @@ function show_help {
   echo ""
   echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
-  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|tls-valid|tls-invalid] [-m|--menu] [--show-server-config] 
+  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
   echo ""
   echo "  -t, --transport <tcp|http|grpc|ws> Transport protocol (ws, http, grpc, ws, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
-  echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using tls-valid security)"
+  echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
   echo "      --regenerate          Regenerate public and private keys"
   echo "      --default             Restore default configuration"
   echo "  -r  --restart             Restart services"
@@ -105,11 +105,11 @@ function show_help {
   echo "      --enable-warp <true|false> Enable or disable Cloudflare warp"
   echo "      --warp-license <warp-license> Add Cloudflare warp+ license"
   echo "  -c  --core <sing-box|xray> Select core (xray, sing-box, default: ${defaults[core]})"
-  echo "      --security <reality|tls-valid|tls-invalid> Select type of TLS encryption (reality, tls-valid, tls-invalid, default: ${defaults[security]})" 
+  echo "      --security <reality|letsencrypt|selfsigned> Select type of TLS encryption (reality, letsencrypt, selfsigned, default: ${defaults[security]})" 
   echo "  -m  --menu                Show menu"
-  echo "      --enable-telegram-bot <true|false> Enable Telegram bot for user management"
-  echo "      --telegram-bot-token <token> Token of Telegram bot"
-  echo "      --telegram-bot-admins <telegram-username> Usernames of telegram bot admins (Comma separated list of usernames without leading '@')"
+  echo "      --enable-tgbot <true|false> Enable Telegram bot for user management"
+  echo "      --tgbot-token <token> Token of Telegram bot"
+  echo "      --tgbot-admins <telegram-username> Usernames of telegram bot admins (Comma separated list of usernames without leading '@')"
   echo "      --show-server-config  Print server configuration"
   echo "      --add-user <username> Add new user"
   echo "      --list-users          List all users"
@@ -121,7 +121,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-telegram-bot:,telegram-bot-token:,telegram-bot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -230,7 +230,7 @@ function parse_args {
       --security)
         args[security]="$2"
         case ${args[security]} in
-          reality|tls-valid|tls-invalid)
+          reality|letsencrypt|selfsigned)
             shift 2
             ;;
           *)
@@ -243,19 +243,19 @@ function parse_args {
         args[menu]=true
         shift
         ;;
-      --enable-telegram-bot)
+      --enable-tgbot)
         case "$2" in
           true|false)
             $2 && args[tgbot]=ON || args[tgbot]=OFF
             shift 2
             ;;
           *)
-            echo "Invalid enable-telegram-bot option: $2"
+            echo "Invalid enable-tgbot option: $2"
             return 1
             ;;
         esac
         ;;
-      --telegram-bot-token)
+      --tgbot-token)
         args[tgbot_token]="$2"
         if [[ ! ${args[tgbot_token]} =~ ${regex[tgbot_token]} ]]; then
           echo "Invalid Telegram Bot Token: ${args[tgbot_token]}"
@@ -267,7 +267,7 @@ function parse_args {
         fi
         shift 2
         ;;
-      --telegram-bot-admins)
+      --tgbot-admins)
         args[tgbot_admins]="$2"
         if [[ ! ${args[tgbot_admins]} =~ ${regex[tgbot_admins]} || $tgbot_admins =~ .+_$ || $tgbot_admins =~ .+_,.+ ]]; then
           echo "Invalid Telegram Bot Admins Username: ${args[tgbot_admins]}\nThe usernames must separated by ',' without leading '@' character or any extra space."
@@ -414,26 +414,26 @@ function build_config {
     return 0
   fi
   if [[ ${config[tgbot]} == 'ON' && -z ${config[tgbot_token]} ]]; then
-    echo 'To enable Telegram bot, you have to give the token of bot with --telegram-bot-token option.'
+    echo 'To enable Telegram bot, you have to give the token of bot with --tgbot-token option.'
     exit 1
   fi
   if [[ ${config[tgbot]} == 'ON' && -z ${config[tgbot_admins]} ]]; then
-    echo 'To enable Telegram bot, you have to give the list of authorized Telegram admins username with --telegram-bot-admins option.'
+    echo 'To enable Telegram bot, you have to give the list of authorized Telegram admins username with --tgbot-admins option.'
     exit 1
   fi
   if [[ ${config[warp]} == 'ON' && -z ${config[warp_license]} ]]; then
     echo 'To enable WARP+, you have to give WARP+ license with --warp-license option.'
     exit 1
   fi
-  if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'tls-valid' ]]; then
-    echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "tls-valid" as TLS certifcate.'
+  if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'letsencrypt' ]]; then
+    echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "letsencrypt" as TLS certifcate.'
     exit 1
   fi
   if [[ ${config[transport]} == 'ws' && ${config[security]} == 'reality' ]]; then
-    echo 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to tls-valid or tls-invalid'
+    echo 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to letsencrypt or selfsigned'
     exit 1
   fi
-  if [[ ${config[security]} == 'tls-valid' && ${config[port]} -ne 443 ]]; then
+  if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
     if lsof -i :80 >/dev/null 2>&1; then
       free_80=false
       for container in $(${docker_cmd} -p ${compose_project} ps -q); do
@@ -444,7 +444,7 @@ function build_config {
       done
     fi
     if [[ ${free_80} != 'true' ]]; then
-      echo 'Port 80 must be free if you want to use "tls-valid" as the security option.'
+      echo 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
       exit 1
     fi
   fi
@@ -582,7 +582,7 @@ echo "
   haproxy:
     image: ${image[haproxy]}
     ports:
-    $([[ ${config[security]} == 'tls-valid' || ${config[port]} -eq 443 ]] && echo '- 80:80' || true)
+    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 443 ]] && echo '- 80:80' || true)
     - ${config[port]}:443
     restart: always
     volumes:
@@ -591,7 +591,7 @@ echo "
     networks:
     - reality"
 fi)
-$(if [[ ${config[security]} == 'tls-valid' ]]; then
+$(if [[ ${config[security]} == 'letsencrypt' ]]; then
 echo "
   certbot:
     build:
@@ -665,24 +665,24 @@ defaults
 frontend http
   mode http
   bind :80
-  $([[ ${config[security]} == 'tls-valid' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
-  $([[ ${config[security]} == 'tls-valid' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
-  $([[ ${config[security]} == 'tls-valid' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
+  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
+  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
+  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
   use_backend default
 frontend tls
   bind :443 $([[ ${config[transport]} != 'tcp' ]] && echo 'ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1' || true)
   mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
   $([[ ${config[transport]} != 'tcp' ]] && echo "http-request set-header Host ${config[server]}" || true)
-  $([[ ${config[security]} == 'tls-valid' && ${config[transport]} != 'tcp' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
+  $([[ ${config[security]} == 'letsencrypt' && ${config[transport]} != 'tcp' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
   use_backend engine $([[ ${config[transport]} != 'tcp' ]] && echo "if { path_beg /${config[service_path]} }" || true)
   $([[ ${config[transport]} != 'tcp' ]] && echo 'use_backend default' || true)
 backend engine
   retry-on conn-failure empty-response response-timeout
   mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
   server engine engine:8443 check tfo $([[ ${config[transport]} == 'grpc' ]] && echo 'proto h2' || true) $([[ ${config[transport]} == 'http' ]] && echo 'ssl verify none' "$([[ ${config[core]} == sing-box ]] && echo 'proto h2' || true)" || true)
-$([[ ${config[security]} == 'tls-valid' ]] && echo 'backend certbot' || true)
-$([[ ${config[security]} == 'tls-valid' ]] && echo '  mode http' || true)
-$([[ ${config[security]} == 'tls-valid' ]] && echo '  server certbot certbot:80' || true)
+$([[ ${config[security]} == 'letsencrypt' ]] && echo 'backend certbot' || true)
+$([[ ${config[security]} == 'letsencrypt' ]] && echo '  mode http' || true)
+$([[ ${config[security]} == 'letsencrypt' ]] && echo '  server certbot certbot:80' || true)
 backend default
   mode http
   server nginx nginx:80
@@ -1044,7 +1044,7 @@ function generate_config {
       generate_selfsigned_certificate
     fi
   fi
-  if [[ ${config[security]} == "tls-valid" ]]; then
+  if [[ ${config[security]} == "letsencrypt" ]]; then
     mkdir -p "${config_path}/certbot"
     generate_certbot_deployhook
     generate_certbot_dockerfile
@@ -1111,6 +1111,8 @@ function upgrade {
   if [[ -r ${path[config]} ]]; then
     sed -i 's/transport=h2/transport=http/g' "${path[config]}"
     sed -i 's/core=singbox/core=sing-box/g' "${path[config]}"
+    sed -i 's/security=tls-invalid/security=selfsigned/g' "${path[config]}"
+    sed -i 's/security=tls-valid/security=letsencrypt/g' "${path[config]}"
   fi
   for key in "${!path[@]}"; do
     if [[ -d "${path[$key]}" ]]; then
@@ -1448,8 +1450,8 @@ function config_server_menu {
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ ! ${server} =~ ${regex[domain]} && ${config[security]} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "tls-valid" certificate.'
+    if [[ ! ${server} =~ ${regex[domain]} && ${config[security]} == 'letsencrypt' ]]; then
+      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "letsencrypt" certificate.'
       continue
     fi
     if [[ -z ${server} ]]; then
@@ -1478,7 +1480,7 @@ function config_transport_menu {
       break
     fi
     if [[ ${transport} == 'ws' && ${config[security]} == 'reality' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "tls-valid" or "tls-invalid"'
+      message_box 'Invalid Configuration' 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "letsencrypt" or "selfsigned"'
       continue
     fi
     config[transport]=$transport
@@ -1513,21 +1515,21 @@ function config_security_menu {
     security=$(whiptail --clear --backtitle "$BACKTITLE" --title "Security Type" \
       --radiolist --noitem "Select a security type:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
       "reality" "$([[ "${config[security]}" == 'reality' ]] && echo 'on' || echo 'off')" \
-      "tls-valid" "$([[ "${config[security]}" == 'tls-valid' ]] && echo 'on' || echo 'off')" \
-      "tls-invalid" "$([[ "${config[security]}" == 'tls-invalid' ]] && echo 'on' || echo 'off')" \
+      "letsencrypt" "$([[ "${config[security]}" == 'letsencrypt' ]] && echo 'on' || echo 'off')" \
+      "selfsigned" "$([[ "${config[security]}" == 'selfsigned' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ ! ${config[server]} =~ ${regex[domain]} && ${security} == 'tls-valid' ]]; then
-      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "tls-valid" as security type'
+    if [[ ! ${config[server]} =~ ${regex[domain]} && ${security} == 'letsencrypt' ]]; then
+      message_box 'Invalid Configuration' 'You have to assign a valid domain to server if you want to use "letsencrypt" as security type'
       continue
     fi
     if [[ ${config[transport]} == 'ws' && ${security} == 'reality' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "ws" transport protocol. Change TLS certifcate to "tls-valid" or "tls-invalid" or use other transport protocols'
+      message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "ws" transport protocol. Change TLS certifcate to "letsencrypt" or "selfsigned" or use other transport protocols'
       continue
     fi
-    if [[ ${security} == 'tls-valid' && ${config[port]} -ne 443 ]]; then
+    if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
       if lsof -i :80 >/dev/null 2>&1; then
         free_80=false
         for container in $(${docker_cmd} -p ${compose_project} ps -q); do
@@ -1538,7 +1540,7 @@ function config_security_menu {
         done
       fi
       if [[ ${free_80} != 'true' ]]; then
-        message_box 'Port 80 must be free if you want to use "tls-valid" as the security option.'
+        message_box 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
         continue
       fi
     fi
