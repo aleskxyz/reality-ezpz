@@ -514,7 +514,7 @@ function install_packages {
     if which yum >/dev/null 2>&1; then
       yum makecache
       yum install epel-release -y || true
-      yum install qrencode whiptail -y
+      yum install qrencode newt -y
       return 0
     fi
     echo "OS is not supported!"
