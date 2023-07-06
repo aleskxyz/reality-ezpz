@@ -1722,15 +1722,15 @@ function check_reload {
       md5["$key"]=$(get_md5 "${path[$key]}")
     fi
   done
-  if [[ "${restart[compose]}" == 'true' ]]; then
-    restart_docker_compose
-    return
-  fi
   if [[ "${restart[tgbot]}" == 'true' && "${config[tgbot]}" == 'ON' ]]; then
     restart_tgbot_compose
   fi
   if [[ "${config[tgbot]}" == 'OFF' ]]; then
     ${docker_cmd} --project-directory ${config_path}/tgbot -p ${tgbot_project} down --remove-orphans --timeout 2 >/dev/null 2>&1 || true
+  fi
+  if [[ "${restart[compose]}" == 'true' ]]; then
+    restart_docker_compose
+    return
   fi
   for key in "${!restart[@]}"; do
     if [[ $key != 'none' && $key != 'tgbot' ]]; then
