@@ -1250,7 +1250,7 @@ $([[ ${config[transport]} == 'grpc' ]] && echo 'gRPC serviceName: '"${config[ser
 TLS: $([[ ${config[security]} == 'reality' ]] && echo 'reality' || echo 'tls')
 SNI: ${config[domain]}
 ALPN: $([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')
-Fingerprint: randomized
+Fingerprint: chrome
 $([[ ${config[security]} == 'reality' ]] && echo "PublicKey: ${config[public_key]}" || true)
 $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" || true)
     " | tr -s '\n')
