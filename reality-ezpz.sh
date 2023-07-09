@@ -492,16 +492,13 @@ function build_config {
       warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
     fi
   fi
-  if [[ -n "${args[warp]}" && \
-        "${args[warp]}" == 'ON' && \
-        "${config_file[warp]}" == 'OFF' ]] || \
-     [[ "${config[warp]}" == 'ON' && \
-        -z ${config[warp_private_key]} || \
-        -z ${config[warp_token]} || \
-        -z ${config[warp_id]} || \
-        -z ${config[warp_client_id]} || \
-        -z ${config[warp_interface_ipv4]} || \
-        -z ${config[warp_interface_ipv6]} ]]; then
+  if { [[ -n "${args[warp]}" && "${args[warp]}" == 'ON' && "${config_file[warp]}" == 'OFF' ]] || \
+       [[ "${config[warp]}" == 'ON' && ( -z ${config[warp_private_key]} || \
+                                         -z ${config[warp_token]} || \
+                                         -z ${config[warp_id]} || \
+                                         -z ${config[warp_client_id]} || \
+                                         -z ${config[warp_interface_ipv4]} || \
+                                         -z ${config[warp_interface_ipv6]} ) ]]; }; then
     config[warp]='OFF'
     warp_create_account || exit 1
     warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${config[warp_license]}" || exit 1
