@@ -39,7 +39,6 @@ WIDTH=60
 CHOICE_HEIGHT=20
 
 image[xray]="teddysun/xray:1.8.3"
-image[warp]="aleskxyz/warp-svc:1.3"
 image[sing-box]="gzxhwq/sing-box:v1.3.0"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
@@ -52,6 +51,12 @@ defaults[port]=443
 defaults[safenet]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
+defaults[warp_private_key]=""
+defaults[warp_token]=""
+defaults[warp_id]=""
+defaults[warp_client_id]=""
+defaults[warp_interface_ipv4]=""
+defaults[warp_interface_ipv6]=""
 defaults[core]=sing-box
 defaults[security]=reality
 defaults[server]=$(curl -fsSL --ipv4 https://ifconfig.io)
@@ -73,6 +78,12 @@ config_items=(
   "safenet"
   "warp"
   "warp_license"
+  "warp_private_key"
+  "warp_token"
+  "warp_id"
+  "warp_client_id"
+  "warp_interface_ipv4"
+  "warp_interface_ipv6"
   "tgbot"
   "tgbot_token"
   "tgbot_admins"
@@ -335,11 +346,12 @@ function parse_config_file {
     generate_keys
     return 0
   fi
-  while read -r line; do
+  while IFS= read -r line; do
     if [[ "${line}" =~ ^\s*# ]] || [[ "${line}" =~ ^\s*$ ]]; then
       continue
     fi
-    IFS="=" read -r key value <<< "${line}"
+    key=$(echo "$line" | cut -d "=" -f 1)
+    value=$(echo "$line" | cut -d "=" -f 2-)
     config_file["${key}"]="${value}"
   done < "${path[config]}"
   if [[ -z "${config_file[public_key]}" || \
@@ -390,7 +402,25 @@ function parse_users_file {
 
 function restore_defaults {
   local defaults_items=("${!defaults[@]}")
+  local keep=false
+  local exclude_list=(
+    "warp_license"
+    "tgbot_token"
+  )
+  if [[ -n ${config[warp_id]} && -n ${config[warp_token]} ]]; then
+    warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
+  fi
   for item in "${defaults_items[@]}"; do
+    keep=false
+    for i in "${exclude_list[@]}"; do
+      if [[ "${i}" == "${item}" ]]; then
+        keep=true
+        break
+      fi
+    done
+    if [[ ${keep} == true ]]; then
+      continue
+    fi
     config["${item}"]="${defaults[${item}]}"
   done
 }
@@ -457,7 +487,34 @@ function build_config {
   if [[ -n "${args[server]}" && "${config[security]}" != 'reality' ]]; then
     config[domain]="${config[server]}"
   fi
-  config[server_ip]=$(ip route get 1.1.1.1 | grep -oE 'src [0-9.]+' | awk '{print $2}')
+  if [[ -n "${args[warp]}" && "${args[warp]}" == 'OFF' && "${config_file[warp]}" == 'ON' ]]; then
+    if [[ -n ${config[warp_id]} && -n ${config[warp_token]} ]]; then
+      warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
+    fi
+  fi
+  if [[ -n "${args[warp]}" && \
+        "${args[warp]}" == 'ON' && \
+        "${config_file[warp]}" == 'OFF' ]] || \
+     [[ "${config[warp]}" == 'ON' && \
+        -z ${config[warp_private_key]} || \
+        -z ${config[warp_token]} || \
+        -z ${config[warp_id]} || \
+        -z ${config[warp_client_id]} || \
+        -z ${config[warp_interface_ipv4]} || \
+        -z ${config[warp_interface_ipv6]} ]]; then
+    config[warp]='OFF'
+    warp_create_account || exit 1
+    warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${config[warp_license]}" || exit 1
+    config[warp]='ON'
+  fi
+  if [[ -n ${args[warp_license]} && -n ${config_file[warp_license]} && "${args[warp_license]}" != "${config_file[warp_license]}" ]]; then
+    if ! warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${args[warp_license]}"; then
+      config[warp]='OFF'
+      config[warp_license]=""
+      warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
+      echo "WARP has been disabled due to the license error."
+    fi 
+  fi
 }
 
 function update_config_file {
@@ -465,7 +522,7 @@ function update_config_file {
   touch "${path[config]}"
   for item in "${config_items[@]}"; do
     if grep -q "^${item}=" "${path[config]}"; then
-      sed -i "s/^${item}=.*/${item}=${config[${item}]}/" "${path[config]}"
+      sed -i "s|^${item}=.*|${item}=${config[${item}]}|" "${path[config]}"
     else
       echo "${item}=${config[${item}]}" >> "${path[config]}"
     fi
@@ -505,16 +562,16 @@ function uninstall {
 }
 
 function install_packages {
-  if ! which qrencode whiptail >/dev/null 2>&1; then
+  if ! which qrencode whiptail jq >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
       apt update
-      apt install qrencode whiptail -y
+      apt install qrencode whiptail jq -y
       return 0
     fi
     if which yum >/dev/null 2>&1; then
       yum makecache
       yum install epel-release -y || true
-      yum install qrencode newt -y
+      yum install qrencode newt jq -y
       return 0
     fi
     echo "OS is not supported!"
@@ -609,22 +666,6 @@ echo "
     - reality
     entrypoint: /bin/sh
     command: /startup.sh"
-fi)
-$(if [[ ${config[warp]} == ON ]]; then
-echo "
-  warp:
-    image: ${image[warp]}
-    expose:
-    - 1080
-    restart: always
-    environment:
-      FAMILIES_MODE: $([[ ${config[safenet]} == ON ]] && echo 'full' || echo 'off')
-      WARP_LICENSE: ${config[warp_license]}
-    volumes:
-    - ./warp:/var/lib/cloudflare-warp
-    networks:
-      reality:
-        ipv4_address: 10.255.255.10"
 fi)
 EOF
 }
@@ -757,14 +798,14 @@ function generate_tgbot_dockerfile {
   cat >"${path[tgbot_dockerfile]}" << EOF
 FROM ${image[python]}
 WORKDIR /opt/reality-ezpz/tgbot
-RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode sudo openssl
+RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode sudo openssl jq
 RUN pip install --no-cache-dir python-telegram-bot==13.5
 CMD [ "python", "./tgbot.py" ]
 EOF
 }
 
 function download_tgbot_script {
-  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/tgbot.py -o "${path[tgbot_script]}"
+  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/warp/tgbot.py -o "${path[tgbot_script]}"
 }
 
 function generate_selfsigned_certificate {
@@ -779,16 +820,51 @@ function generate_engine_config {
   local users_object=""
   local reality_object=""
   local tls_object=""
+  local warp_object=""
   if [[ ${config[core]} == 'sing-box' ]]; then
-  reality_object='"tls": {"enabled": true,"server_name": "'"${config[domain]}"'","alpn": [],"reality": {"enabled": true,"handshake": {"server": "'"${config[domain]}"'","server_port": 443},"private_key": "'"${config[private_key]}"'","short_id": ["'"${config[short_id]}"'"],"max_time_difference": "1m"}}'
-  tls_object='"tls": {"enabled": true, "certificate_path": "/etc/sing-box/server.crt", "key_path": "/etc/sing-box/server.key"}'
-  for user in "${!users[@]}"; do
-    if [ -n "$users_object" ]; then
-      users_object="${users_object},"$'\n'
+    reality_object='"tls": {
+      "enabled": true,
+      "server_name": "'"${config[domain]}"'",
+      "alpn": [],
+      "reality": {
+        "enabled": true,
+        "handshake": {
+          "server": "'"${config[domain]}"'",
+          "server_port": 443
+        },
+        "private_key": "'"${config[private_key]}"'",
+        "short_id": ["'"${config[short_id]}"'"],
+        "max_time_difference": "1m"
+      }
+    }'
+    tls_object='"tls": {
+      "enabled": true,
+      "certificate_path": "/etc/sing-box/server.crt",
+      "key_path": "/etc/sing-box/server.key"
+    }'
+    if [[ ${config[warp]} == 'ON' ]]; then
+      warp_object='{
+        "type": "wireguard",
+        "server": "engage.cloudflareclient.com",
+        "server_port": 2408,
+        "system_interface": false,
+        "local_address": [
+          "'"${config[warp_interface_ipv4]}"'/32",
+          "'"${config[warp_interface_ipv6]}"'/128"
+        ],
+        "private_key": "'"${config[warp_private_key]}"'",
+        "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+        "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
+        "mtu": 1280
+      },'
     fi
-    users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
-  done
-  cat >"${path[engine]}" <<EOF
+    for user in "${!users[@]}"; do
+      if [ -n "$users_object" ]; then
+        users_object="${users_object},"$'\n'
+      fi
+      users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
+    done
+    cat >"${path[engine]}" <<EOF
 {
   "log": {
     "level": "error",
@@ -837,7 +913,7 @@ function generate_engine_config {
     }
   ],
   "outbounds": [
-    $([[ ${config[warp]} == ON ]] && echo '{"type": "socks","server": "10.255.255.10", "server_port": 1080, "version": "5", "udp_over_tcp": {"enabled": true, "version": 2}},' || echo '{"type": "direct"},')
+    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || echo '{"type": "direct"},')
     {
       "type": "direct",
       "tag": "dns"
@@ -905,17 +981,52 @@ function generate_engine_config {
   }
 }
 EOF
-fi
+  fi
   if [[ ${config[core]} == 'xray' ]]; then
-  reality_object='"security":"reality","realitySettings":{"show": false,"dest": "'"${config[domain]}"':443","xver": 0,"serverNames": ["'"${config[domain]}"'"],"privateKey": "'"${config[private_key]}"'","maxTimeDiff": 60000,"shortIds": ["'"${config[short_id]}"'"]}'
-  tls_object='"security": "tls","tlsSettings": {"certificates": [{"oneTimeLoading": true, "certificateFile": "/etc/xray/server.crt", "keyFile": "/etc/xray/server.key"}]}'
-  for user in "${!users[@]}"; do
-    if [ -n "$users_object" ]; then
-      users_object="${users_object},"$'\n'
+    reality_object='"security":"reality",
+    "realitySettings":{
+      "show": false,
+      "dest": "'"${config[domain]}"':443",
+      "xver": 0,
+      "serverNames": ["'"${config[domain]}"'"],
+      "privateKey": "'"${config[private_key]}"'",
+      "maxTimeDiff": 60000,
+      "shortIds": ["'"${config[short_id]}"'"]
+    }'
+    tls_object='"security": "tls",
+    "tlsSettings": {
+      "certificates": [{
+        "oneTimeLoading": true,
+        "certificateFile": "/etc/xray/server.crt",
+        "keyFile": "/etc/xray/server.key"
+      }]
+    }'
+    if [[ ${config[warp]} == 'ON' ]]; then
+      warp_object='{
+        "protocol": "wireguard",
+        "settings": {
+          "secretKey": "'"${config[warp_private_key]}"'",
+          "address": [
+            "'"${config[warp_interface_ipv4]}"'/32",
+            "'"${config[warp_interface_ipv6]}"'/128"
+          ],
+          "peers": [
+            {
+              "endpoint": "engage.cloudflareclient.com:2408",
+              "publicKey": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
+            }
+          ],
+          "mtu": 1280
+        }
+      },'
     fi
-    users_object=${users_object}'{"id": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "email": "'"${user}"'"}'
-  done
-  cat >"${path[engine]}" <<EOF
+    for user in "${!users[@]}"; do
+      if [ -n "$users_object" ]; then
+        users_object="${users_object},"$'\n'
+      fi
+      users_object=${users_object}'{"id": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "email": "'"${user}"'"}'
+    done
+    cat >"${path[engine]}" <<EOF
 {
   "log": {
     "loglevel": "error"
@@ -965,7 +1076,7 @@ fi
     }
   ],
   "outbounds": [
-    $([[ ${config[warp]} == ON ]] && echo '{"protocol": "socks","settings": {"servers": [{"address": "10.255.255.10","port": 1080}]}},' || echo '{"protocol": "freedom"},')
+    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || echo '{"protocol": "freedom"},')
     {
       "protocol": "blackhole",
       "tag": "block"
@@ -1031,7 +1142,7 @@ fi
   }
 }
 EOF
-fi
+  fi
 }
 
 function generate_config {
@@ -1092,16 +1203,18 @@ function print_client_configuration {
 }
 
 function upgrade {
+  local uuid
+  local warp_token
+  local warp_id
   if [[ -e "${HOME}/reality/config" ]]; then
     ${docker_cmd} --project-directory "${HOME}/reality" down --remove-orphans --timeout 2
     mv -f "${HOME}/reality" /opt/reality-ezpz
   fi
-  local uuid
   uuid=$(grep '^uuid=' "${path[config]}" 2>/dev/null | cut -d= -f2 || true)
   if [[ -n $uuid ]]; then
-    sed -i '/^uuid=/d' "${path[users]}"
+    sed -i '|^uuid=|d' "${path[users]}"
     echo "RealityEZPZ=${uuid}" >> "${path[users]}"
-    sed -i 's/=true/=ON/g; s/=false/=OFF/g' "${path[users]}"
+    sed -i 's|=true|=ON|g; s|=false|=OFF|g' "${path[users]}"
   fi
   rm -f "${config_path}/xray.conf"
   rm -f "${config_path}/singbox.conf"
@@ -1109,16 +1222,23 @@ function upgrade {
     ${docker_cmd} --project-directory ${config_path} down --remove-orphans --timeout 2
   fi
   if [[ -r ${path[config]} ]]; then
-    sed -i 's/transport=h2/transport=http/g' "${path[config]}"
-    sed -i 's/core=singbox/core=sing-box/g' "${path[config]}"
-    sed -i 's/security=tls-invalid/security=selfsigned/g' "${path[config]}"
-    sed -i 's/security=tls-valid/security=letsencrypt/g' "${path[config]}"
+    sed -i 's|transport=h2|transport=http|g' "${path[config]}"
+    sed -i 's|core=singbox|core=sing-box|g' "${path[config]}"
+    sed -i 's|security=tls-invalid|security=selfsigned|g' "${path[config]}"
+    sed -i 's|security=tls-valid|security=letsencrypt|g' "${path[config]}"
   fi
   for key in "${!path[@]}"; do
     if [[ -d "${path[$key]}" ]]; then
       rm -rf "${path[$key]}"
     fi
   done
+  if [[ -d "${config_path}/warp" ]]; then
+    ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
+    warp_token=$(cat ${config_path}/warp/reg.json | jq -r '.api_token')
+    warp_id=$(cat ${config_path}/warp/reg.json | jq -r '.registration_id')
+    warp_api "DELETE" "/reg/${warp_id}" "" "${warp_token}" >/dev/null 2>&1 || true
+    rm -rf "${config_path}/warp"
+  fi
 }
 
 function main_menu {
@@ -1362,7 +1482,7 @@ function restore_defaults_menu {
   fi
   restore_defaults
   update_config_file
-  message_box "Restore Default Config" "All configurations has been restored to them defaults."
+  message_box "Restore Default Config" "All configurations has been restored to their defaults."
 }
 
 function configuration_menu {
@@ -1596,6 +1716,9 @@ function config_safenet_menu {
 function config_warp_menu {
   local warp
   local warp_license
+  local error
+  local temp_file
+  local exit_code
   local old_warp=${config[warp]}
   local old_warp_license=${config[warp_license]}
   while true; do
@@ -1609,8 +1732,26 @@ function config_warp_menu {
     fi
     if [[ $warp == 'Disable' ]]; then
       config[warp]=OFF
-      update_config_file
+      if [[ -n ${config[warp_id]} && -n ${config[warp_token]} ]]; then
+        warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
+      fi
       return
+    fi
+    if [[ -z ${config[warp_private_key]} || \
+          -z ${config[warp_token]} || \
+          -z ${config[warp_id]} || \
+          -z ${config[warp_client_id]} || \
+          -z ${config[warp_interface_ipv4]} || \
+          -z ${config[warp_interface_ipv6]} ]]; then
+      temp_file=$(mktemp)
+      warp_create_account > "${temp_file}"
+      exit_code=$?
+      error=$(< "${temp_file}")
+      rm -f "${temp_file}"
+      if [[ ${exit_code} -ne 0 ]]; then
+        message_box "WARP account creation error" "${error}"
+        continue
+      fi
     fi
     config[warp]=ON
     while true; do
@@ -1624,8 +1765,15 @@ function config_warp_menu {
         message_box "Invalid Input" "Invalid WARP+ License"
         continue
       fi
-      config[warp_license]=$warp_license
-      update_config_file
+      temp_file=$(mktemp)
+      warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${warp_license}" > "${temp_file}"
+      exit_code=$?
+      error=$(< "${temp_file}")
+      rm -f "${temp_file}"
+      if [[ ${exit_code} -ne 0 ]]; then
+        message_box "WARP license error" "${error}"
+        continue
+      fi
       return
     done
   done
@@ -1711,6 +1859,129 @@ function restart_container {
   if ${docker_cmd} --project-directory ${config_path} -p ${compose_project} ps --services "$1" | grep "$1"; then
     ${docker_cmd} --project-directory ${config_path} -p ${compose_project} restart --timeout 2 "$1"
   fi
+}
+
+function warp_api {
+  local verb=$1
+  local resource=$2
+  local data=$3
+  local token=$4
+  local team_token=$5
+  local endpoint=https://api.cloudflareclient.com/v0a2158
+  local temp_file
+  local error
+  local command
+  local headers=(
+    "User-Agent: okhttp/3.12.1"
+    "CF-Client-Version: a-6.10-2158"
+    "Content-Type: application/json"
+  )
+  temp_file=$(mktemp)
+  if [[ -n ${token} ]]; then
+    headers+=("Authorization: Bearer ${token}")
+  fi
+  if [[ -n ${team_token} ]]; then
+    headers+=("Cf-Access-Jwt-Assertion: ${team_token}")
+  fi
+  command="curl -sLX ${verb} -w '%{http_code}' -o ${temp_file} ${endpoint}${resource}"
+  for header in "${headers[@]}"; do
+    command+=" -H '${header}'"
+  done
+  if [[ -n ${data} ]]; then
+    command+=" -d '${data}'"
+  fi
+  response_code=$(( $(eval "${command}" || true) ))
+  response_body=$(cat "${temp_file}")
+  rm -f "${temp_file}"
+  if [[ response_code -eq 0 ]]; then
+    return 1
+  fi
+  if [[ response_code -gt 399 ]]; then
+    error=$(echo "${response_body}" | jq -r '.errors[0].message' 2> /dev/null || true)
+    if [[ ${error} != 'null' ]]; then
+      echo "${error}"
+    fi
+    return 2
+  fi
+  echo "${response_body}"
+}
+
+function warp_create_account {
+  local key_pair
+  local public_key
+  local private_key
+  local install_id
+  local fcm_token
+  local tos
+  local data
+  local response
+  local error
+  key_pair=$(curl -fsSL https://wg.cloudflare.now.cc)
+  public_key=$(echo "${key_pair}" | grep 'PublicKey' | awk '{print $2}')
+  private_key=$(echo "${key_pair}" | grep 'PrivateKey' | awk '{print $2}')
+  install_id=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 22)
+  fcm_token="${install_id}:APA91b$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 134)"
+  tos=$(date +"%Y-%m-%dT%H:%M:%S.000Z")
+  data='{
+    "key":"'${public_key}'",
+    "install_id":"'${install_id}'",
+    "fcm_token":"'${fcm_token}'",
+    "tos":"'${tos}'",
+    "model":"PC",
+    "serial_number":"'${install_id}'",
+    "locale":"en_US"
+  }'
+  response=$(warp_api "POST" "/reg" "${data}")
+  if [[ $? -ne 0 ]]; then
+    if [[ -n ${response} ]]; then
+      echo "${response}"
+    fi
+    return 1
+  fi
+  config[warp_private_key]="${private_key}"
+  config[warp_token]=$(echo "${response}" | jq -r '.token')
+  config[warp_id]=$(echo "${response}" | jq -r '.id')
+  config[warp_client_id]=$(echo "${response}" | jq -r '.config.client_id')
+  config[warp_interface_ipv4]=$(echo "${response}" | jq -r '.config.interface.addresses.v4')
+  config[warp_interface_ipv6]=$(echo "${response}" | jq -r '.config.interface.addresses.v6')
+  update_config_file
+}
+
+function warp_add_license {
+  local id=$1
+  local token=$2
+  local license=$3
+  local data
+  local response
+  data='{"license": "'$license'"}'
+  response=$(warp_api "PUT" "/reg/${id}/account" "${data}" "${token}")
+  if [[ $? -ne 0 ]]; then
+    if [[ -n ${response} ]]; then
+      echo "${response}"
+    fi
+    return 1
+  fi
+  config[warp_license]=${license}
+  update_config_file
+}
+
+function warp_delete_account {
+  local id=$1
+  local token=$2
+  warp_api "DELETE" "/reg/${id}" "" "${token}" >/dev/null 2>&1 || true
+  config[warp_private_key]=""
+  config[warp_token]=""
+  config[warp_id]=""
+  config[warp_client_id]=""
+  config[warp_interface_ipv4]=""
+  config[warp_interface_ipv6]=""
+  update_config_file
+}
+
+function warp_decode_reserved {
+  client_id=$1
+  reserved=$(echo "${client_id}" | base64 -d | xxd -p | fold -w2 | while read HEX; do printf '%d ' "0x${HEX}"; done | awk '{print "["$1", "$2", "$3"]"}')
+  echo "${reserved}"
 }
 
 function check_reload {
