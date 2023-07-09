@@ -1209,7 +1209,7 @@ function upgrade {
   fi
   uuid=$(grep '^uuid=' "${path[config]}" 2>/dev/null | cut -d= -f2 || true)
   if [[ -n $uuid ]]; then
-    sed -i '|^uuid=|d' "${path[users]}"
+    sed -i '/^uuid=/d' "${path[users]}"
     echo "RealityEZPZ=${uuid}" >> "${path[users]}"
     sed -i 's|=true|=ON|g; s|=false|=OFF|g' "${path[users]}"
   fi
