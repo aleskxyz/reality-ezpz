@@ -102,7 +102,7 @@ Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] 
   - [v2rayNG](https://github.com/2dust/v2rayNg/releases)
   - [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid/releases)
 - iOS
-  - [Wings X](https://apps.apple.com/app/wings-x-client/id6446119727)
+  - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
 - Windows
