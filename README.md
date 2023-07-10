@@ -315,5 +315,5 @@ We want to setup a server with these configurations:
 
 So we need to execute this command:
 ```
-bash <(curl -sL https://bit.ly/realityez) --transport grpc --domain www.wikipedia.com --enable-safenet true -enable-warp true --warp-license d34tgvde-gf73xvsj-23acfbg7
+bash <(curl -sL https://bit.ly/realityez) --transport=grpc --domain=www.wikipedia.com --enable-safenet=true --enable-warp=true --warp-license=26z9i0ld-WG0wy324-rA703nZ2
 ```
