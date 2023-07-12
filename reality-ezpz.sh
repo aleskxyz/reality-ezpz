@@ -44,6 +44,7 @@ image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
 image[python]="python:3.11-alpine"
+image[wgcf]="virb3/wgcf:2.2.18"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
@@ -1904,40 +1905,23 @@ function warp_api {
 }
 
 function warp_create_account {
-  local key_pair
-  local public_key
-  local private_key
-  local install_id
-  local fcm_token
-  local tos
-  local data
   local response
-  local error
-  key_pair=$(curl -fsSL https://wg.cloudflare.now.cc)
-  public_key=$(echo "${key_pair}" | grep 'PublicKey' | awk '{print $2}')
-  private_key=$(echo "${key_pair}" | grep 'PrivateKey' | awk '{print $2}')
-  install_id=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 22)
-  fcm_token="${install_id}:APA91b$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 134)"
-  tos=$(date +"%Y-%m-%dT%H:%M:%S.000Z")
-  data='{
-    "key":"'${public_key}'",
-    "install_id":"'${install_id}'",
-    "fcm_token":"'${fcm_token}'",
-    "tos":"'${tos}'",
-    "model":"PC",
-    "serial_number":"'${install_id}'",
-    "locale":"en_US"
-  }'
-  response=$(warp_api "POST" "/reg" "${data}")
+  docker run --rm -it -v "${config_path}":/data "${image[wgcf]}" register --config /data/wgcf-account.toml --accept-tos
+  if [[ $? -ne 0 || ! -r ${config_path}/wgcf-account.toml ]]; then
+    echo "WARP account creation has been failed!"
+    return 1
+  fi
+  config[warp_token]=$(cat ${config_path}/wgcf-account.toml | grep 'access_token' | cut -d "'" -f2)
+  config[warp_id]=$(cat ${config_path}/wgcf-account.toml | grep 'device_id' | cut -d "'" -f2)
+  config[warp_private_key]=$(cat ${config_path}/wgcf-account.toml | grep 'private_key' | cut -d "'" -f2)
+  rm -f ${config_path}/wgcf-account.toml
+  response=$(warp_api "GET" "/reg/${config[warp_id]}" "" "${config[warp_token]}")
   if [[ $? -ne 0 ]]; then
     if [[ -n ${response} ]]; then
       echo "${response}"
     fi
     return 1
   fi
-  config[warp_private_key]="${private_key}"
-  config[warp_token]=$(echo "${response}" | jq -r '.token')
-  config[warp_id]=$(echo "${response}" | jq -r '.id')
   config[warp_client_id]=$(echo "${response}" | jq -r '.config.client_id')
   config[warp_interface_ipv4]=$(echo "${response}" | jq -r '.config.interface.addresses.v4')
   config[warp_interface_ipv6]=$(echo "${response}" | jq -r '.config.interface.addresses.v6')
