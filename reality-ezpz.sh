@@ -556,6 +556,7 @@ function uninstall {
     docker-compose --project-directory "${config_path}/tgbot" -p ${tgbot_project} down --timeout 2 || true
   fi
   rm -rf "${config_path}"
+  echo "Reality-EZPZ uninstalled successfully."
   exit 0
 }
 
@@ -2130,4 +2131,5 @@ fi
 if [[ -n $username ]]; then
   print_client_configuration "${username}"
 fi
+echo "Command has been executed successfully!"
 exit 0
