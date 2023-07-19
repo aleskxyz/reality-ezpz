@@ -823,7 +823,8 @@ function generate_engine_config {
   local reality_port=443
   local san_entries=""
   if [[ ${config[security]} == 'reality' && ${config[port]} -ne 443 ]]; then
-    san_entries=$(echo | timeout 1 openssl s_client -servername "${config[domain]}" -connect "${config[domain]}:${config[port]}" 2>/dev/null | openssl x509 -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -n1 | tr -d ' ' || true)
+    san_entries=$(echo | timeout 1 openssl s_client -servername "${config[domain]}" -connect "${config[domain]}:${config[port]}" 2>/dev/null \
+                   | openssl x509 -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -n1 | tr -d ' ' || true)
     IFS=', ' read -ra san_list <<< "${san_entries}"
     for san in "${san_list[@]}"; do
       if [[ "DNS:${config[domain]}" == ${san} ]]; then
