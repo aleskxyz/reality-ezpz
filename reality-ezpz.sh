@@ -561,16 +561,16 @@ function uninstall {
 }
 
 function install_packages {
-  if ! which qrencode whiptail jq >/dev/null 2>&1; then
+  if ! which qrencode whiptail jq xxd >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
       apt update
-      apt install qrencode whiptail jq -y
+      apt install qrencode whiptail jq xxd -y
       return 0
     fi
     if which yum >/dev/null 2>&1; then
       yum makecache
       yum install epel-release -y || true
-      yum install qrencode newt jq -y
+      yum install qrencode newt jq vim-common -y
       return 0
     fi
     echo "OS is not supported!"
