@@ -820,6 +820,18 @@ function generate_engine_config {
   local reality_object=""
   local tls_object=""
   local warp_object=""
+  local reality_port=443
+  local san_entries=""
+  if [[ ${config[security]} == 'reality' && ${config[port]} -ne 443 ]]; then
+    san_entries=$(echo | timeout 1 openssl s_client -servername "${config[domain]}" -connect "${config[domain]}:${config[port]}" 2>/dev/null | openssl x509 -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -n1 | tr -d ' ' || true)
+    IFS=', ' read -ra san_list <<< "${san_entries}"
+    for san in "${san_list[@]}"; do
+      if [[ "DNS:${config[domain]}" == ${san} ]]; then
+        reality_port=${config[port]}
+        break
+      fi
+    done
+  fi
   if [[ ${config[core]} == 'sing-box' ]]; then
     reality_object='"tls": {
       "enabled": true,
@@ -829,7 +841,7 @@ function generate_engine_config {
         "enabled": true,
         "handshake": {
           "server": "'"${config[domain]}"'",
-          "server_port": 443
+          "server_port": '"${reality_port}"'
         },
         "private_key": "'"${config[private_key]}"'",
         "short_id": ["'"${config[short_id]}"'"],
@@ -985,7 +997,7 @@ EOF
     reality_object='"security":"reality",
     "realitySettings":{
       "show": false,
-      "dest": "'"${config[domain]}"':443",
+      "dest": "'"${config[domain]}"':'"${reality_port}"'",
       "xver": 0,
       "serverNames": ["'"${config[domain]}"'"],
       "privateKey": "'"${config[private_key]}"'",
