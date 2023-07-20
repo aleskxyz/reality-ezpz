@@ -97,6 +97,7 @@ regex[username]="^[a-zA-Z0-9]+$"
 regex[ip]="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
 regex[tgbot_token]="^[0-9]{8,10}:[a-zA-Z0-9_-]{35}$"
 regex[tgbot_admins]="^[a-zA-Z][a-zA-Z0-9_]{4,31}(,[a-zA-Z][a-zA-Z0-9_]{4,31})*$"
+regex[domain_port]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}(:[1-9][0-9]*)?$"
 
 function show_help {
   echo ""
@@ -154,7 +155,7 @@ function parse_args {
         ;;
       -d|--domain)
         args[domain]="$2"
-        if ! [[ ${args[domain]} =~ ${regex[domain]} ]]; then
+        if ! [[ ${args[domain]} =~ ${regex[domain_port]} ]]; then
           echo "Invalid domain: ${args[domain]}"
           return 1
         fi
@@ -821,27 +822,18 @@ function generate_engine_config {
   local tls_object=""
   local warp_object=""
   local reality_port=443
-  local san_entries=""
-  if [[ ${config[security]} == 'reality' && ${config[port]} -ne 443 ]]; then
-    san_entries=$(echo | timeout 1 openssl s_client -servername "${config[domain]}" -connect "${config[domain]}:${config[port]}" 2>/dev/null \
-                   | openssl x509 -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -n1 | tr -d ' ' || true)
-    IFS=', ' read -ra san_list <<< "${san_entries}"
-    for san in "${san_list[@]}"; do
-      if [[ "DNS:${config[domain]}" == ${san} ]]; then
-        reality_port=${config[port]}
-        break
-      fi
-    done
+  if [[ ${config[security]} == 'reality' && ${config[domain]} =~ ":" ]]; then
+    reality_port="${config[domain]#*:}"
   fi
   if [[ ${config[core]} == 'sing-box' ]]; then
     reality_object='"tls": {
       "enabled": true,
-      "server_name": "'"${config[domain]}"'",
+      "server_name": "'"${config[domain]%%:*}"'",
       "alpn": [],
       "reality": {
         "enabled": true,
         "handshake": {
-          "server": "'"${config[domain]}"'",
+          "server": "'"${config[domain]%%:*}"'",
           "server_port": '"${reality_port}"'
         },
         "private_key": "'"${config[private_key]}"'",
@@ -894,7 +886,7 @@ function generate_engine_config {
       "listen": "::",
       "listen_port": 8080,
       "network": "tcp",
-      "override_address": "${config[domain]}",
+      "override_address": "${config[domain]%%:*}",
       "override_port": 80
     },
     {
@@ -998,9 +990,9 @@ EOF
     reality_object='"security":"reality",
     "realitySettings":{
       "show": false,
-      "dest": "'"${config[domain]}"':'"${reality_port}"'",
+      "dest": "'"${config[domain]%%:*}"':'"${reality_port}"'",
       "xver": 0,
-      "serverNames": ["'"${config[domain]}"'"],
+      "serverNames": ["'"${config[domain]%%:*}"'"],
       "privateKey": "'"${config[private_key]}"'",
       "maxTimeDiff": 60000,
       "shortIds": ["'"${config[short_id]}"'"]
@@ -1052,7 +1044,7 @@ EOF
       "port": 8080,
       "protocol": "dokodemo-door",
       "settings": {
-        "address": "${config[domain]}",
+        "address": "${config[domain]%%:*}",
         "port": 80,
         "network": "tcp"
       }
@@ -1195,7 +1187,7 @@ function print_client_configuration {
   client_config="${client_config}&fp=chrome"
   client_config="${client_config}&type=${config[transport]}"
   client_config="${client_config}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
-  client_config="${client_config}&sni=${config[domain]}"
+  client_config="${client_config}&sni=${config[domain]%%:*}"
   client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&host=${config[server]}" || true)"
   client_config="${client_config}$([[ ${config[security]} == 'reality' ]] && echo "&pbk=${config[public_key]}" || true)"
   client_config="${client_config}$([[ ${config[security]} == 'reality' ]] && echo "&sid=${config[short_id]}" || true)"
@@ -1380,7 +1372,7 @@ $([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "
 $([[ ${config[transport]} == 'grpc' ]] && echo 'gRPC mode: gun' || true)
 $([[ ${config[transport]} == 'grpc' ]] && echo 'gRPC serviceName: '"${config[service_path]}" || true)
 TLS: $([[ ${config[security]} == 'reality' ]] && echo 'reality' || echo 'tls')
-SNI: ${config[domain]}
+SNI: ${config[domain]%%:*}
 ALPN: $([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')
 Fingerprint: chrome
 $([[ ${config[security]} == 'reality' ]] && echo "PublicKey: ${config[public_key]}" || true)
@@ -1630,7 +1622,7 @@ function config_sni_domain_menu {
     if [[ $? -ne 0 ]]; then
       break
     fi
-    if [[ ! $sni_domain =~ ${regex[domain]} ]]; then
+    if [[ ! $sni_domain =~ ${regex[domain_port]} ]]; then
       message_box "Invalid Domain" '"'"${sni_domain}"'" in not a valid domain.'
       continue
     fi
