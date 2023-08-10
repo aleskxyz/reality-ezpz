@@ -60,7 +60,7 @@ defaults[warp_interface_ipv4]=""
 defaults[warp_interface_ipv6]=""
 defaults[core]=sing-box
 defaults[security]=reality
-defaults[server]=$(curl -fsSL --ipv4 https://ifconfig.io)
+defaults[server]=$(curl -fsSL --ipv4 https://cloudflare.com/cdn-cgi/trace | grep ip | cut -d '=' -f2)
 defaults[tgbot]=OFF
 defaults[tgbot_token]=""
 defaults[tgbot_admins]=""
