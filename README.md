@@ -107,7 +107,9 @@ Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] 
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN/releases)
+- Windows, Linux, macOS
   - [NekoRay](https://github.com/MatsuriDayo/nekoray/releases)
+  - [Furious](https://github.com/LorenEteval/Furious/releases)
 
 ## Security Options
 This script can configure the service with 3 types of security options:
