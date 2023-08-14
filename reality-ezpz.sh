@@ -639,8 +639,8 @@ echo "
   haproxy:
     image: ${image[haproxy]}
     ports:
-    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 443 ]] && echo '- 80:80' || true)
-    - ${config[port]}:443
+    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
+    - ${config[port]}:8443
     restart: always
     volumes:
     - ./${path[haproxy]#${config_path}/}:/usr/local/etc/haproxy/haproxy.cfg
@@ -705,13 +705,13 @@ defaults
   timeout tarpit 5s
 frontend http
   mode http
-  bind :80
+  bind :8080
   $([[ ${config[security]} == 'letsencrypt' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
   $([[ ${config[security]} == 'letsencrypt' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
   $([[ ${config[security]} == 'letsencrypt' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
   use_backend default
 frontend tls
-  bind :443 $([[ ${config[transport]} != 'tcp' ]] && echo 'ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1' || true)
+  bind :8443 $([[ ${config[transport]} != 'tcp' ]] && echo 'ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1' || true)
   mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
   $([[ ${config[transport]} != 'tcp' ]] && echo "http-request set-header Host ${config[server]}" || true)
   $([[ ${config[security]} == 'letsencrypt' && ${config[transport]} != 'tcp' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
