@@ -101,12 +101,12 @@ regex[domain_port]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}(:[1-9][0-9]*)
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
   echo ""
-  echo "  -t, --transport <tcp|http|grpc|ws> Transport protocol (ws, http, grpc, ws, default: ${defaults[transport]})"
+  echo "  -t, --transport <tcp|http|grpc|ws|tuic> Transport protocol (tcp, http, grpc, ws, tuic, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
   echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
   echo "      --regenerate          Regenerate public and private keys"
@@ -144,7 +144,7 @@ function parse_args {
       -t|--transport)
         args[transport]="$2"
         case ${args[transport]} in
-          tcp|http|grpc|ws)
+          tcp|http|grpc|ws|tuic)
             shift 2
             ;;
           *)
@@ -465,6 +465,14 @@ function build_config {
     echo 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to letsencrypt or selfsigned'
     exit 1
   fi
+  if [[ ${config[transport]} == 'tuic' && ${config[security]} == 'reality' ]]; then
+    echo 'You cannot use "tuic" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to letsencrypt or selfsigned'
+    exit 1
+  fi
+  if [[ ${config[transport]} == 'tuic' && ${config[core]} == 'xray' ]]; then
+    echo 'You cannot use "tuic" transport with "xray" core. Use other transports or change core to sing-box'
+    exit 1
+  fi
   if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
     if lsof -i :80 >/dev/null 2>&1; then
       free_80=false
@@ -616,6 +624,8 @@ services:
     $([[ ${config[security]} == 'reality' ]] && echo "ports:" || true)
     $([[ ${config[security]} == 'reality' && ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
     $([[ ${config[security]} == 'reality' ]] && echo "- ${config[port]}:8443" || true)
+    $([[ ${config[transport]} == 'tuic' ]] && echo "ports:" || true)
+    $([[ ${config[transport]} == 'tuic' ]] && echo "- ${config[port]}:8443/udp" || true)
     $([[ ${config[security]} != 'reality' ]] && echo "expose:" || true)
     $([[ ${config[security]} != 'reality' ]] && echo "- 8443" || true)
     restart: always
@@ -623,8 +633,8 @@ services:
       TZ: Etc/UTC
     volumes:
     - ./${path[engine]#${config_path}/}:/etc/${config[core]}/config.json
-    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]]; } && echo "- ./${path[server_crt]#${config_path}/}:/etc/${config[core]}/server.crt" || true)
-    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]]; } && echo "- ./${path[server_key]#${config_path}/}:/etc/${config[core]}/server.key" || true)
+    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]]; } && echo "- ./${path[server_crt]#${config_path}/}:/etc/${config[core]}/server.crt" || true)
+    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]]; } && echo "- ./${path[server_key]#${config_path}/}:/etc/${config[core]}/server.key" || true)
     networks:
     - reality
 $(if [[ ${config[security]} != 'reality' ]]; then
@@ -687,7 +697,7 @@ EOF
 }
 
 function generate_haproxy_config {
-  cat >"${path[haproxy]}" << EOF
+echo "
 global
   ssl-default-bind-options ssl-min-ver TLSv1.2
 defaults
@@ -706,28 +716,56 @@ defaults
 frontend http
   mode http
   bind :8080
-  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
-  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'acl letsencrypt-acl path_beg /.well-known/acme-challenge' || true)
-  $([[ ${config[security]} == 'letsencrypt' ]] && echo 'redirect scheme https if !letsencrypt-acl' || true)
+$(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
+  use_backend certbot if { path_beg /.well-known/acme-challenge }
+  acl letsencrypt-acl path_beg /.well-known/acme-challenge
+  redirect scheme https if !letsencrypt-acl
+"; fi)
   use_backend default
 frontend tls
-  bind :8443 $([[ ${config[transport]} != 'tcp' ]] && echo 'ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1' || true)
-  mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
-  $([[ ${config[transport]} != 'tcp' ]] && echo "http-request set-header Host ${config[server]}" || true)
-  $([[ ${config[security]} == 'letsencrypt' && ${config[transport]} != 'tcp' ]] && echo 'use_backend certbot if { path_beg /.well-known/acme-challenge }' || true)
-  use_backend engine $([[ ${config[transport]} != 'tcp' ]] && echo "if { path_beg /${config[service_path]} }" || true)
-  $([[ ${config[transport]} != 'tcp' ]] && echo 'use_backend default' || true)
+$(if [[ ${config[transport]} != 'tcp' ]]; then echo "
+  bind :8443 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
+  mode http
+  http-request set-header Host ${config[server]}
+$(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
+  use_backend certbot if { path_beg /.well-known/acme-challenge }
+"; fi)
+$(if [[ ${config[transport]} != 'tuic' ]]; then echo "
+  use_backend engine if { path_beg /${config[service_path]} }
+"; fi)
+  use_backend default
+"; else echo "
+  bind :8443
+  mode tcp
+  use_backend engine
+"; fi)
+$(if [[ ${config[transport]} != 'tuic' ]]; then echo "
 backend engine
   retry-on conn-failure empty-response response-timeout
-  mode $([[ ${config[transport]} != 'tcp' ]] && echo 'http' || echo 'tcp')
-  server engine engine:8443 check tfo $([[ ${config[transport]} == 'grpc' ]] && echo 'proto h2' || true) $([[ ${config[transport]} == 'http' ]] && echo 'ssl verify none' "$([[ ${config[core]} == sing-box ]] && echo 'proto h2' || true)" || true)
-$([[ ${config[security]} == 'letsencrypt' ]] && echo 'backend certbot' || true)
-$([[ ${config[security]} == 'letsencrypt' ]] && echo '  mode http' || true)
-$([[ ${config[security]} == 'letsencrypt' ]] && echo '  server certbot certbot:80' || true)
+$(if [[ ${config[transport]} != 'tcp' ]]; then echo "
+  mode http
+"; else echo "
+  mode tcp
+"; fi)
+$(if [[ ${config[transport]} == 'grpc' ]]; then echo "
+  server engine engine:8443 check tfo proto h2
+"; elif [[ ${config[transport]} == 'http' && ${config[core]} == 'sing-box' ]]; then echo "
+  server engine engine:8443 check tfo proto h2 ssl verify none
+"; elif [[ ${config[transport]} == 'http' && ${config[core]} != 'sing-box' ]]; then echo "
+  server engine engine:8443 check tfo ssl verify none
+"; else echo "
+  server engine engine:8443 check tfo
+"; fi)
+"; fi)
+$(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
+backend certbot
+  mode http
+  server certbot certbot:80
+"; fi)
 backend default
   mode http
   server nginx nginx:80
-EOF
+" | grep -vE '^\s*$' > "${path[haproxy]}"
 }
 
 function generate_certbot_script {
@@ -866,7 +904,11 @@ function generate_engine_config {
       if [ -n "$users_object" ]; then
         users_object="${users_object},"$'\n'
       fi
-      users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
+      if [[ ${config[transport]} != 'tuic' ]]; then
+        users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
+      else
+        users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
+      fi
     done
     cat >"${path[engine]}" <<EOF
 {
@@ -890,7 +932,7 @@ function generate_engine_config {
       "override_port": 80
     },
     {
-      "type": "vless",
+      "type": "$([[ ${config[transport]} == 'tuic' ]] && echo 'tuic' || echo 'vless')",
       "listen": "::",
       "listen_port": 8443,
       "sniff": true,
@@ -899,12 +941,12 @@ function generate_engine_config {
       "users": [${users_object}],
       $(if [[ ${config[security]} == 'reality' ]]; then
         echo "${reality_object}"
-      elif [[ ${config[transport]} == 'http' || ${config[transport]} == 'tcp' ]]; then
+      elif [[ ${config[transport]} == 'http' || ${config[transport]} == 'tcp' || ${config[transport]} == 'tuic' ]]; then
         echo "${tls_object}"
       else
         echo '"tls":{"enabled": false}'
       fi)
-      $( if [[ ${config[transport]} == http ]]; then
+      $(if [[ ${config[transport]} == http ]]; then
       echo ',"transport": {"type": "http", "host": ["'"${config[server]}"'"], "path": "/'"${config[service_path]}"'"}'
       fi
       if [[ ${config[transport]} == grpc ]]; then
@@ -913,6 +955,9 @@ function generate_engine_config {
       if [[ ${config[transport]} == ws ]]; then
       echo ',"transport": {"type": "ws", "headers": {"Host": "'"${config[server]}"'"}, "path": "/'"${config[service_path]}"'"}'
       fi
+      if [[ ${config[transport]} == tuic ]]; then
+      echo ',"congestion_control": "bbr", "auth_timeout": "3s", "zero_rtt_handshake": false, "heartbeat": "10s"'
+      fi 
       )
     }
   ],
@@ -1176,25 +1221,36 @@ function generate_config {
 function print_client_configuration {
   local username=$1
   local client_config
-  client_config="vless://"
-  client_config="${client_config}${users[${username}]}"
-  client_config="${client_config}@${config[server]}"
-  client_config="${client_config}:${config[port]}"
-  client_config="${client_config}?security=$([[ ${config[security]} == 'reality' ]] && echo reality || echo tls)"
-  client_config="${client_config}&encryption=none"
-  client_config="${client_config}&alpn=$([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')"
-  client_config="${client_config}&headerType=none"
-  client_config="${client_config}&fp=chrome"
-  client_config="${client_config}&type=${config[transport]}"
-  client_config="${client_config}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
-  client_config="${client_config}&sni=${config[domain]%%:*}"
-  client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&host=${config[server]}" || true)"
-  client_config="${client_config}$([[ ${config[security]} == 'reality' ]] && echo "&pbk=${config[public_key]}" || true)"
-  client_config="${client_config}$([[ ${config[security]} == 'reality' ]] && echo "&sid=${config[short_id]}" || true)"
-  client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&path=%2F${config[service_path]}" || true)"
-  client_config="${client_config}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=gun' || true)"
-  client_config="${client_config}$([[ ${config[transport]} == 'grpc' ]] && echo "&serviceName=${config[service_path]}" || true)"
-  client_config="${client_config}#${username}"
+  if [[ ${config[transport]} != 'tuic' ]]; then
+    client_config="vless://"
+    client_config="${client_config}${users[${username}]}"
+    client_config="${client_config}@${config[server]}"
+    client_config="${client_config}:${config[port]}"
+    client_config="${client_config}?security=$([[ ${config[security]} == 'reality' ]] && echo reality || echo tls)"
+    client_config="${client_config}&encryption=none"
+    client_config="${client_config}&alpn=$([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')"
+    client_config="${client_config}&headerType=none"
+    client_config="${client_config}&fp=chrome"
+    client_config="${client_config}&type=${config[transport]}"
+    client_config="${client_config}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
+    client_config="${client_config}&sni=${config[domain]%%:*}"
+    client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&host=${config[server]}" || true)"
+    client_config="${client_config}$([[ ${config[security]} == 'reality' ]] && echo "&pbk=${config[public_key]}" || true)"
+    client_config="${client_config}$([[ ${config[security]} == 'reality' ]] && echo "&sid=${config[short_id]}" || true)"
+    client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&path=%2F${config[service_path]}" || true)"
+    client_config="${client_config}$([[ ${config[transport]} == 'grpc' ]] && echo '&mode=gun' || true)"
+    client_config="${client_config}$([[ ${config[transport]} == 'grpc' ]] && echo "&serviceName=${config[service_path]}" || true)"
+    client_config="${client_config}#${username}"
+  else
+    client_config="tuic://"
+    client_config="${client_config}${users[${username}]}"
+    client_config="${client_config}:$(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"
+    client_config="${client_config}@${config[server]}"
+    client_config="${client_config}:${config[port]}"
+    client_config="${client_config}/?congestion_control=bbr&udp_relay_mode=quic"
+    client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&allow_insecure=1" || true)"
+    client_config="${client_config}#${username}"
+  fi
   echo ""
   echo "=================================================="
   echo "Client configuration:"
@@ -1360,8 +1416,10 @@ function view_user_menu {
         return 0
       fi
     fi
-    user_config=$(echo "
-Remaks: ${username}
+    if [[ ${config[transport]} != 'tuic' ]]; then
+      user_config=$(echo "
+Protocol: vless
+Remarks: ${username}
 Address: ${config[server]}
 Port: ${config[port]}
 ID: ${users[$username]}
@@ -1377,7 +1435,19 @@ ALPN: $([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1
 Fingerprint: chrome
 $([[ ${config[security]} == 'reality' ]] && echo "PublicKey: ${config[public_key]}" || true)
 $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" || true)
-    " | tr -s '\n')
+      " | tr -s '\n')
+    else
+      user_config=$(echo "
+Protocol: tuic
+Remarks: ${username}
+Address: ${config[server]}
+Port: ${config[port]}
+UUID: ${users[$username]}
+Password: $(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)
+UDP Relay Mode: quic
+Congestion Control: bbr
+      " | tr -s '\n')
+    fi
     whiptail \
       --clear \
       --backtitle "$BACKTITLE" \
@@ -1553,16 +1623,23 @@ function configuration_menu {
 
 function config_core_menu {
   local core
-  core=$(whiptail --clear --backtitle "$BACKTITLE" --title "Core" \
-    --radiolist --noitem "Select a core engine:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-    "xray" "$([[ "${config[core]}" == 'xray' ]] && echo 'on' || echo 'off')" \
-    "sing-box" "$([[ "${config[core]}" == 'sing-box' ]] && echo 'on' || echo 'off')" \
-    3>&1 1>&2 2>&3)
-  if [[ $? -ne 0 ]]; then
-    return
-  fi
-  config[core]=$core
-  update_config_file
+  while true; do
+    core=$(whiptail --clear --backtitle "$BACKTITLE" --title "Core" \
+      --radiolist --noitem "Select a core engine:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+      "xray" "$([[ "${config[core]}" == 'xray' ]] && echo 'on' || echo 'off')" \
+      "sing-box" "$([[ "${config[core]}" == 'sing-box' ]] && echo 'on' || echo 'off')" \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      break
+    fi
+    if [[ ${core} == 'xray' && ${config[transport]} == 'tuic' ]]; then
+      message_box 'Invalid Configuration' 'You cannot use "xray" core with "tuic" transport. Change core to "sing-box" or use other transports'
+      continue
+    fi
+    config[core]=$core
+    update_config_file
+    break
+  done
 }
 
 function config_server_menu {
@@ -1599,12 +1676,21 @@ function config_transport_menu {
       "http" "$([[ "${config[transport]}" == 'http' ]] && echo 'on' || echo 'off')" \
       "grpc" "$([[ "${config[transport]}" == 'grpc' ]] && echo 'on' || echo 'off')" \
       "ws" "$([[ "${config[transport]}" == 'ws' ]] && echo 'on' || echo 'off')" \
+      "tuic" "$([[ "${config[transport]}" == 'tuic' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
     fi
     if [[ ${transport} == 'ws' && ${config[security]} == 'reality' ]]; then
       message_box 'Invalid Configuration' 'You cannot use "ws" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "letsencrypt" or "selfsigned"'
+      continue
+    fi
+    if [[ ${transport} == 'tuic' && ${config[security]} == 'reality' ]]; then
+      message_box 'Invalid Configuration' 'You cannot use "tuic" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "letsencrypt" or "selfsigned"'
+      continue
+    fi
+    if [[ ${transport} == 'tuic' && ${config[core]} == 'xray' ]]; then
+      message_box 'Invalid Configuration' 'You cannot use "tuic" transport with "xray" core. Use other transports or change core to "sing-box"'
       continue
     fi
     config[transport]=$transport
@@ -1651,6 +1737,10 @@ function config_security_menu {
     fi
     if [[ ${config[transport]} == 'ws' && ${security} == 'reality' ]]; then
       message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "ws" transport protocol. Change TLS certifcate to "letsencrypt" or "selfsigned" or use other transport protocols'
+      continue
+    fi
+    if [[ ${config[transport]} == 'tuic' && ${security} == 'reality' ]]; then
+      message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "tuic" transport. Change TLS certifcate to "letsencrypt" or "selfsigned" or use other transports'
       continue
     fi
     if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then

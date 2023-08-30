@@ -13,7 +13,7 @@ def get_users_ezpz():
   local_command = command + '--list-users'
   return run_command(local_command).split('\n')[:-1]
 def get_config_ezpz(username):
-  local_command = command + f'--show-user {username} | grep vless://'
+  local_command = command + f'--show-user {username} | grep ://'
   return run_command(local_command)
 def delete_user_ezpz(username):
   local_command = command + f'--delete-user {username}'
