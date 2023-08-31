@@ -65,12 +65,13 @@ def users_list(update, context, text, callback):
 
 @restricted
 def show_user(update, context, username):
-  text = get_config_ezpz(username)
+  configs = get_config_ezpz(username).split('\n')
+  text = f'IPv4 Config:\n`{configs[1]}`\n\nIPv6 Config:\n`{configs[0]}`'
   keyboard = []
   keyboard.append([InlineKeyboardButton('Back', callback_data='show_user')])
   reply_markup = InlineKeyboardMarkup(keyboard)
   context.bot.send_message(chat_id=update.effective_chat.id, text=f'Config for "{username}":')
-  context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=reply_markup)
+  context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='MarkdownV2', reply_markup=reply_markup)
 
 @restricted
 def delete_user(update, context, username):

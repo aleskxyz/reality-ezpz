@@ -71,7 +71,7 @@ You can also enable Telegram bot with `--enable-tgbot` option and manage users f
 
 Help message of the script:
 ```
-Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<domain>] [--server=<server>] [--ipv6-address=<ipv6-address>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]
@@ -79,6 +79,7 @@ Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<doma
   -t, --transport <tcp|http|grpc|ws|tuic> Transport protocol (tcp, http, grpc, ws, tuic default: tcp)
   -d, --domain <domain>     Domain to use as SNI (default: www.google.com)
       --server <server>     IP address or domain name of server (Must be a valid domain if using ws)
+      --ipv6-address <ipv6-address> IPv6 address of server"
       --regenerate          Regenerate public and private keys
       --default             Restore default configuration
   -r  --restart             Restart services

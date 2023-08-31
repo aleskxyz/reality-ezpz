@@ -61,6 +61,7 @@ defaults[warp_interface_ipv6]=""
 defaults[core]=sing-box
 defaults[security]=reality
 defaults[server]=$(curl -fsSL --ipv4 https://cloudflare.com/cdn-cgi/trace | grep ip | cut -d '=' -f2)
+defaults[ipv6_address]=$(curl -fsSL --ipv6 https://cloudflare.com/cdn-cgi/trace | grep ip | cut -d '=' -f2)
 defaults[tgbot]=OFF
 defaults[tgbot_token]=""
 defaults[tgbot_admins]=""
@@ -75,6 +76,7 @@ config_items=(
   "transport"
   "domain"
   "server"
+  "ipv6_address"
   "port"
   "safenet"
   "warp"
@@ -95,13 +97,14 @@ regex[port]="^[1-9][0-9]*$"
 regex[warp_license]="^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}-[a-zA-Z0-9]{8}$"
 regex[username]="^[a-zA-Z0-9]+$"
 regex[ip]="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
+regex[ipv6]="^([0-9a-fA-F]{0,4}:){0,7}[0-9a-fA-F]{0,4}$"
 regex[tgbot_token]="^[0-9]{8,10}:[a-zA-Z0-9_-]{35}$"
 regex[tgbot_admins]="^[a-zA-Z][a-zA-Z0-9_]{4,31}(,[a-zA-Z][a-zA-Z0-9_]{4,31})*$"
 regex[domain_port]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}(:[1-9][0-9]*)?$"
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<domain>] [--server=<server>] [--ipv6-address=<ipv6-address>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
@@ -109,6 +112,7 @@ function show_help {
   echo "  -t, --transport <tcp|http|grpc|ws|tuic> Transport protocol (tcp, http, grpc, ws, tuic, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
   echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
+  echo "      --ipv6-address <ipv6-address> IPv6 address of server"
   echo "      --regenerate          Regenerate public and private keys"
   echo "      --default             Restore default configuration"
   echo "  -r  --restart             Restart services"
@@ -134,7 +138,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,ipv6-address:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -165,6 +169,14 @@ function parse_args {
         args[server]="$2"
         if ! [[ ${args[server]} =~ ${regex[domain]} || ${args[server]} =~ ${regex[ip]} ]]; then
           echo "Invalid server: ${args[domain]}"
+          return 1
+        fi
+        shift 2
+        ;;
+      --ipv6-address)
+        args[ipv6_address]="$2"
+        if ! [[ ${args[ipv6_address]} =~ ${regex[ipv6]} ]]; then
+          echo "Invalid IPv6 address: ${args[ipv6_address]}"
           return 1
         fi
         shift 2
@@ -1218,13 +1230,14 @@ function generate_config {
   fi
 }
 
-function print_client_configuration {
+function get_client_configuration {
   local username=$1
+  local address=$2
   local client_config
   if [[ ${config[transport]} != 'tuic' ]]; then
     client_config="vless://"
     client_config="${client_config}${users[${username}]}"
-    client_config="${client_config}@${config[server]}"
+    client_config="${client_config}@${address}"
     client_config="${client_config}:${config[port]}"
     client_config="${client_config}?security=$([[ ${config[security]} == 'reality' ]] && echo reality || echo tls)"
     client_config="${client_config}&encryption=none"
@@ -1245,21 +1258,38 @@ function print_client_configuration {
     client_config="tuic://"
     client_config="${client_config}${users[${username}]}"
     client_config="${client_config}:$(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"
-    client_config="${client_config}@${config[server]}"
+    client_config="${client_config}@${address}"
     client_config="${client_config}:${config[port]}"
     client_config="${client_config}/?congestion_control=bbr&udp_relay_mode=quic"
     client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&allow_insecure=1" || true)"
     client_config="${client_config}#${username}"
   fi
+  echo "$client_config"
+}
+
+function print_client_configuration {
+  local username=$1
+  local client_config_ipv4
+  local client_config_ipv6
+  client_config_ipv4=$(get_client_configuration $username ${config[server]})
+  client_config_ipv6=$(get_client_configuration $username [${config[ipv6_address]}])
   echo ""
   echo "=================================================="
   echo "Client configuration:"
   echo ""
-  echo "$client_config"
+  echo "IPv6 Config:"
+  echo "$client_config_ipv6"
+  echo ""
+  echo "IPv4 Config:"
+  echo "$client_config_ipv4"
   echo ""
   echo "Or you can scan the QR code:"
   echo ""
-  qrencode -t ansiutf8 "${client_config}"
+  echo "IPv6 Config:"
+  qrencode -t ansiutf8 "${client_config_ipv6}"
+  echo ""
+  echo "IPv4 Config:"
+  qrencode -t ansiutf8 "${client_config_ipv4}"
 }
 
 function upgrade {
@@ -1421,6 +1451,7 @@ function view_user_menu {
 Protocol: vless
 Remarks: ${username}
 Address: ${config[server]}
+IPv6 Address: ${config[ipv6_address]}
 Port: ${config[port]}
 ID: ${users[$username]}
 Flow: $([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)
@@ -1441,6 +1472,7 @@ $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" 
 Protocol: tuic
 Remarks: ${username}
 Address: ${config[server]}
+IPv6 Address: ${config[ipv6_address]}
 Port: ${config[port]}
 UUID: ${users[$username]}
 Password: $(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)
@@ -1488,6 +1520,7 @@ function show_server_config {
   local server_config
   server_config="Core: ${config[core]}"
   server_config=$server_config$'\n'"Server Address: ${config[server]}"
+  server_config=$server_config$'\n'"Server IPv6 Address: ${config[ipv6_address]}"
   server_config=$server_config$'\n'"Domain SNI: ${config[domain]}"
   server_config=$server_config$'\n'"Port: ${config[port]}"
   server_config=$server_config$'\n'"Transport: ${config[transport]}"
@@ -1566,16 +1599,17 @@ function configuration_menu {
       --menu "Select an option:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
       "1" "Core" \
       "2" "Server Address" \
-      "3" "Transport" \
-      "4" "SNI Domain" \
-      "5" "Security" \
-      "6" "Port" \
-      "7" "Safe Internet" \
-      "8" "WARP" \
-      "9" "Telegram Bot" \
-      "10" "Restart Services" \
-      "11" "Regenerate Keys" \
-      "12" "Restore Defaults" \
+      "3" "Server IPv6 Address" \
+      "4" "Transport" \
+      "5" "SNI Domain" \
+      "6" "Security" \
+      "7" "Port" \
+      "8" "Safe Internet" \
+      "9" "WARP" \
+      "10" "Telegram Bot" \
+      "11" "Restart Services" \
+      "12" "Regenerate Keys" \
+      "13" "Restore Defaults" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1588,33 +1622,36 @@ function configuration_menu {
         config_server_menu
         ;;
       3 )
-        config_transport_menu
+        config_server_ipv6_menu
         ;;
       4 )
-        config_sni_domain_menu
+        config_transport_menu
         ;;
       5 )
-        config_security_menu
+        config_sni_domain_menu
         ;;
       6 )
-        config_port_menu
+        config_security_menu
         ;;
       7 )
-        config_safenet_menu
+        config_port_menu
         ;;
       8 )
-        config_warp_menu
+        config_safenet_menu
         ;;
       9 )
-        config_tgbot_menu
+        config_warp_menu
         ;;
       10 )
-        restart_menu
+        config_tgbot_menu
         ;;
       11 )
-        regenerate_menu
+        restart_menu
         ;;
       12 )
+        regenerate_menu
+        ;;
+      13 )
         restore_defaults_menu
         ;;
     esac
@@ -1662,6 +1699,24 @@ function config_server_menu {
     if [[ ${config[security]} != 'reality' ]]; then
       config[domain]="${server}"
     fi
+    update_config_file
+    break
+  done
+}
+
+function config_server_ipv6_menu {
+  local server_ipv6
+  while true; do
+    server_ipv6=$(whiptail --clear --backtitle "$BACKTITLE" --title "Server IPv6 Address" \
+      --inputbox "Enter Server IPv6 Address:" $HEIGHT $WIDTH "${config["ipv6_address"]}" \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      break
+    fi
+    if [[ -z ${server_ipv6} ]]; then
+      server_ipv6="${defaults[ipv6_address]}"
+    fi
+    config[ipv6_address]="${server_ipv6}"
     update_config_file
     break
   done
