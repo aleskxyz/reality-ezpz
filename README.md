@@ -1,12 +1,13 @@
 # reality-ezpz
 Install and configure vless with reality or TLS on your linux server by executing a single command!
 
-TUIC on sing-box is also supported!
+TUIC and hysteria2 on sing-box is also supported!
 
 This script:
 * Installs docker with compose plugin in your server
 * Generates docker-compose.yml and sing-box/xray configuration for vless protocol for reality and tls
 * Generates docker-compose.yml and sing-box configuration for TUIC protocol with tls
+* Generates docker-compose.yml and sing-box configuration for hysteria2 protocol with tls
 * Create Cloudflare warp account and configure warp as outbound
 * Generates client configuration string and QRcode
 * Gets and renews valid certificate from Letsencrypt for TLS encryption
@@ -24,7 +25,7 @@ Features:
 * You can regenerate configuration and keys
 * You can change SNI domain
 * You can change transport protocol (tcp, http, grpc, ws)
-* You can change tunneling protocol (vless, TUIC)
+* You can change tunneling protocol (vless, TUIC, hysteria2)
 * You can get valid TLS certificate with Letsencrypt
 * You can block malware and adult contents
 * Use Cloudflare WARP to hide your outbound traffic
@@ -71,12 +72,12 @@ You can also enable Telegram bot with `--enable-tgbot` option and manage users f
 
 Help message of the script:
 ```
-Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]
 
-  -t, --transport <tcp|http|grpc|ws|tuic> Transport protocol (tcp, http, grpc, ws, tuic default: tcp)
+  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: tcp)
   -d, --domain <domain>     Domain to use as SNI (default: www.google.com)
       --server <server>     IP address or domain name of server (Must be a valid domain if using ws)
       --regenerate          Regenerate public and private keys
@@ -140,12 +141,15 @@ CDN compatibility table:
 | grpc  | :heavy_check_mark:  | :heavy_check_mark:  |
 | ws  | :heavy_check_mark:  | :heavy_check_mark:  |
 | tuic  | :x:  | :x:  |
+| hysteria2  | :x:  | :x:  |
 
 - You need to enable `grpc` or `websocket` in Cloudflare if you want to use the corresponding transport protocols.
 - You have to configure CDN provider to use HTTPS for connecting to your server.
 - The `ws` transport protocol is not compatible with `reality` security option.
 - The `tuic` tunneling protocol is not compatible with `reality` security option.
 - The `tuic` tunneling protocol is only compatible with `sing-box` core option.
+- The `hysteria2` tunneling protocol is not compatible with `reality` security option.
+- The `hysteria2` tunneling protocol is only compatible with `sing-box` core option.
 - Avoid using `tcp` transport protocol with `letsencrypt` or `selfsigned` security options.
 - Avoid using `selfsigned` security option. Get a domain and use `letsencrypt` option.
 - Do not change the port to something other than `443`.
@@ -205,11 +209,17 @@ You can change it by using `--transport` or `-t` options:
 ```
 bash <(curl -sL https://bit.ly/realityez) -t http
 ```
-Valid options are `tcp`,`http`, `grpc`, `ws` and `tuic`.
+Valid options are `tcp`,`http`, `grpc`, `ws`, `tuic` and `hysteria2`.
 
 `ws` is not compatible with reality protocol. You have to use `letsencrypt` or `selfsigned` with it.
+
 `tuic` is not compatible with reality protocol. You have to use `letsencrypt` or `selfsigned` with it.
+
 `tuic` is compatible with sing-box core only.
+
+`hysteria2` is not compatible with reality protocol. You have to use `letsencrypt` or `selfsigned` with it.
+
+`hysteria2` is compatible with sing-box core only.
 
 ### Block malware and adult contents
 You can block malware and adult contents by using `--enable-safenet` option:
