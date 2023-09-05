@@ -1252,7 +1252,14 @@ function print_client_configuration {
     client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&allow_insecure=1" || true)"
     client_config="${client_config}#${username}"
   elif [[ ${config[transport]} == 'hysteria2' ]]; then
-    client_config="hysteria2://"
+    client_config="hy2://"
+    client_config="${client_config}${users[${username}]}"
+    client_config="${client_config}:$(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"
+    client_config="${client_config}@${config[server]}"
+    client_config="${client_config}:${config[port]}"
+    client_config="${client_config}/?&obfs-password=${config[service_path]}"
+    client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&allow_insecure=1" || true)"
+    client_config="${client_config}#${username}"
   else
     client_config="vless://"
     client_config="${client_config}${users[${username}]}"
