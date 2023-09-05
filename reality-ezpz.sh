@@ -923,7 +923,7 @@ function generate_engine_config {
       if [[ ${config[transport]} == 'tuic' ]]; then
         users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
       elif [[ ${config[transport]} == 'hysteria2' ]]; then
-        users_object=${users_object}'{"password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'", "name": "'"${user}"'"}'
+        users_object=${users_object}'{"password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
       else
         users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
       fi
@@ -1253,7 +1253,7 @@ function print_client_configuration {
     client_config="${client_config}#${username}"
   elif [[ ${config[transport]} == 'hysteria2' ]]; then
     client_config="hy2://"
-    client_config="${client_config}${users[${username}]}"
+    client_config="${client_config}${username}"
     client_config="${client_config}:$(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"
     client_config="${client_config}@${config[server]}"
     client_config="${client_config}:${config[port]}"
