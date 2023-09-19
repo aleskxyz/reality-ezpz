@@ -1005,7 +1005,6 @@ function generate_engine_config {
       {
         "geosite": [
           $([[ ${config[safenet]} == ON ]] && echo '"category-porn",' || true)
-          "category-ads-all"
         ],
         "outbound": "block"
       },
@@ -1194,7 +1193,6 @@ EOF
         "outboundTag": "block",
         "domain": [
           $([[ ${config[safenet]} == ON ]] && echo '"geosite:category-porn",' || true)
-          "geosite:category-ads-all",
           "domain:pushnotificationws.com",
           "domain:sunlight-leds.com",
           "domain:icecyber.org"
