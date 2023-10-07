@@ -64,6 +64,7 @@ defaults[server]=$(curl -fsSL --ipv4 https://cloudflare.com/cdn-cgi/trace | grep
 defaults[tgbot]=OFF
 defaults[tgbot_token]=""
 defaults[tgbot_admins]=""
+defaults[block-iran]=true
 
 config_items=(
   "core"
@@ -88,6 +89,7 @@ config_items=(
   "tgbot"
   "tgbot_token"
   "tgbot_admins"
+  "block-iran"
 )
 
 regex[domain]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"
@@ -101,13 +103,14 @@ regex[domain_port]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}(:[1-9][0-9]*)
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [-b|--block-iran=true|false] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
   echo ""
   echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
+  echo "  -b, --block-iran          <true|false> Enable or disable blocking Iranian websites (default: ${defaults[block-iran]})"
   echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
   echo "      --regenerate          Regenerate public and private keys"
   echo "      --default             Restore default configuration"
@@ -134,7 +137,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:b:ruc:mh --long transport:,domain:,block-iran:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -160,6 +163,18 @@ function parse_args {
           return 1
         fi
         shift 2
+        ;;
+        -b|--block-iran)
+        case "$2" in
+          true|false)
+            $2 && args[block-iran]=ON || args[block-iran]=OFF
+            shift 2
+            ;;
+          *)
+            echo "Invalid block-iran option: $2"
+            return 1
+            ;;
+        esac
         ;;
       --server)
         args[server]="$2"
@@ -997,7 +1012,7 @@ function generate_engine_config {
     "rules": [
       {
         "geoip": [
-          $([[ ${config[warp]} == OFF ]] && echo '"cn", "ir",')
+          $([[ ${config[warp]} == OFF ]] && [[ ${config[block-iran]} == ON ]] && echo '"cn", "ir",'|| [[ ${config[warp]} == OFF ]] && [[ ${config[block-iran]} == OFF ]] && echo '"cn",' || true )
           "private"
         ],
         "outbound": "block"
@@ -1158,7 +1173,7 @@ EOF
       {
         "type": "field",
         "ip": [
-          $([[ ${config[warp]} == OFF ]] && echo '"geoip:cn", "geoip:ir",')
+          $([[ ${config[warp]} == OFF ]] && [[ ${config[block-iran]} == ON ]] && echo '"geoip:cn", "geoip:ir",' || [[ ${config[warp]} == OFF ]] && [[ ${config[block-iran]} == OFF ]] && echo '"geoip:cn",' || true)
           "0.0.0.0/8",
           "10.0.0.0/8",
           "100.64.0.0/10",
@@ -1528,6 +1543,7 @@ function show_server_config {
   server_config="Core: ${config[core]}"
   server_config=$server_config$'\n'"Server Address: ${config[server]}"
   server_config=$server_config$'\n'"Domain SNI: ${config[domain]}"
+  server_config=$server_config$'\n'"Block Iran Websites: ${config[block-iran]}"
   server_config=$server_config$'\n'"Port: ${config[port]}"
   server_config=$server_config$'\n'"Transport: ${config[transport]}"
   server_config=$server_config$'\n'"Security: ${config[security]}"
@@ -1615,6 +1631,7 @@ function configuration_menu {
       "10" "Restart Services" \
       "11" "Regenerate Keys" \
       "12" "Restore Defaults" \
+      "13" "Block Iran Websites" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1655,6 +1672,9 @@ function configuration_menu {
         ;;
       12 )
         restore_defaults_menu
+        ;;
+      13 )
+        config_blockiran_menu
         ;;
     esac
   done
@@ -1768,6 +1788,20 @@ function config_sni_domain_menu {
     update_config_file
     break
   done
+}
+
+function config_blockiran_menu {
+  local blockiran
+  blockiran=$(whiptail --clear --backtitle "$BACKTITLE" --title "Block Iran Websites" \
+    --radiolist --noitem "Enable blocking Iran websites" $HEIGHT $WIDTH $CHOICE_HEIGHT \
+    "Enable" "$([[ "${config[block-iran]}" == 'ON' ]] && echo 'on' || echo 'off')" \
+    "Disable" "$([[ "${config[block-iran]}" == 'OFF' ]] && echo 'on' || echo 'off')" \
+    3>&1 1>&2 2>&3)
+  if [[ $? -ne 0 ]]; then
+    return
+  fi
+  config[block-iran]=$([[ $blockiran == 'Enable' ]] && echo ON || echo OFF)
+  update_config_file
 }
 
 function config_security_menu {

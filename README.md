@@ -72,13 +72,14 @@ You can also enable Telegram bot with `--enable-tgbot` option and manage users f
 
 Help message of the script:
 ```
-Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [-b|--block-iran=true|false] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
   [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]
 
   -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: tcp)
   -d, --domain <domain>     Domain to use as SNI (default: www.google.com)
+  -b, --block-iran          <true|false> Enable or disable blocking Iranian websites (default: true)
       --server <server>     IP address or domain name of server (Must be a valid domain if using ws)
       --regenerate          Regenerate public and private keys
       --default             Restore default configuration
@@ -227,6 +228,16 @@ You can block malware and adult contents by using `--enable-safenet` option:
 bash <(curl -sL https://bit.ly/realityez) --enable-safenet true
 ```
 You can disable this feature with `--enable-safenet false` option.
+
+### Block Iranian websites
+You can block Iranian websites by using `--block-iran` option:
+```
+bash <(curl -sL https://bit.ly/realityez) --block-iran true
+```
+You can disable this feature with `--block-iran false` option.
+
+by default this option is enabled.
+
 
 ### Get runnig configuration
 You can get the running configuration with `--show-server-config` option:
