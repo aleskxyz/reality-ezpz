@@ -14,7 +14,7 @@ def get_users_ezpz():
   return run_command(local_command).split('\n')[:-1]
 def get_config_ezpz(username):
   local_command = command + f'--show-user {username} | grep ://'
-  return run_command(local_command)
+  return run_command(local_command).split('\n')[:-1]
 def delete_user_ezpz(username):
   local_command = command + f'--delete-user {username}'
   run_command(local_command)
@@ -65,12 +65,12 @@ def users_list(update, context, text, callback):
 
 @restricted
 def show_user(update, context, username):
-  text = get_config_ezpz(username)
   keyboard = []
   keyboard.append([InlineKeyboardButton('Back', callback_data='show_user')])
   reply_markup = InlineKeyboardMarkup(keyboard)
   context.bot.send_message(chat_id=update.effective_chat.id, text=f'Config for "{username}":')
-  context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=reply_markup)
+  for config in get_config_ezpz(username):
+    context.bot.send_message(chat_id=update.effective_chat.id, text=config, reply_markup=reply_markup)
 
 @restricted
 def delete_user(update, context, username):
