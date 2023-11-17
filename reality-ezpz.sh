@@ -851,7 +851,7 @@ EOF
 }
 
 function download_tgbot_script {
-  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/tgbot.py -o "${path[tgbot_script]}"
+  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/ipv6/tgbot.py -o "${path[tgbot_script]}"
 }
 
 function generate_selfsigned_certificate {
@@ -1239,9 +1239,15 @@ function generate_config {
   fi
 }
 
+function get_ipv6 {
+  curl -fsSL --ipv6 https://cloudflare.com/cdn-cgi/trace 2> /dev/null | grep ip | cut -d '=' -f2
+}
+
 function print_client_configuration {
   local username=$1
   local client_config
+  local ipv6
+  local client_config_ipv6
   if [[ ${config[transport]} == 'tuic' ]]; then
     client_config="tuic://"
     client_config="${client_config}${users[${username}]}"
@@ -1289,6 +1295,19 @@ function print_client_configuration {
   echo "Or you can scan the QR code:"
   echo ""
   qrencode -t ansiutf8 "${client_config}"
+  ipv6=$(get_ipv6)
+  if [[ -n $ipv6 ]]; then
+    client_config_ipv6=$(echo "$client_config" | sed "s/@${config[server]}:/@[${ipv6}]:/")
+    echo ""
+    echo "==================IPv6 Config======================"
+    echo "Client configuration:"
+    echo ""
+    echo "$client_config_ipv6"
+    echo ""
+    echo "Or you can scan the QR code:"
+    echo ""
+    qrencode -t ansiutf8 "${client_config_ipv6}"
+  fi
 }
 
 function upgrade {
