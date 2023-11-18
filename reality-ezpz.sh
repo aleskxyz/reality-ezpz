@@ -708,6 +708,7 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - ../:/opt/reality-ezpz
+    - /etc/docker/:/etc/docker/
     networks:
     - tgbot
 EOF
@@ -2269,7 +2270,7 @@ function configure_docker {
   fi
   rm -f "${temp_file}"
   if [[ "${config_modified}" = true ]] || ! systemctl is-active --quiet docker; then
-    sudo systemctl restart docker
+    sudo systemctl restart docker || true
   fi
 }
 
