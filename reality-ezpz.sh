@@ -625,7 +625,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-      - subnet: 2001:0DB8::/112
+      - subnet: fc11::1:0/112
 services:
   engine:
     image: ${image[${config[core]}]}
@@ -697,7 +697,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-      - subnet: 2001:0DB8::1:0/112
+      - subnet: fc11::2:0/112
 services:
   tgbot:
     build: ./
@@ -733,7 +733,7 @@ defaults
   timeout tarpit 5s
 frontend http
   mode http
-  bind :8080
+  bind :::8080 v4v6
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend certbot if { path_beg /.well-known/acme-challenge }
   acl letsencrypt-acl path_beg /.well-known/acme-challenge
@@ -742,7 +742,7 @@ $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend default
 frontend tls
 $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
-  bind :8443 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
+  bind :::8443 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
   mode http
   http-request set-header Host ${config[server]}
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
@@ -753,7 +753,7 @@ $(if [[ ${config[transport]} != 'tuic' && ${config[transport]} != 'hysteria2' ]]
 "; fi)
   use_backend default
 "; else echo "
-  bind :8443
+  bind :::8443 v4v6
   mode tcp
   use_backend engine
 "; fi)
