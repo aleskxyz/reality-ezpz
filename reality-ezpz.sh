@@ -622,10 +622,10 @@ version: "3"
 networks:
   reality:
     driver: bridge
+    enable_ipv6: true
     ipam:
       config:
-      - subnet: 10.255.255.0/24
-        gateway: 10.255.255.1
+      - subnet: 2001:0DB8::/112
 services:
   engine:
     image: ${image[${config[core]}]}
@@ -691,6 +691,13 @@ EOF
 function generate_tgbot_compose {
   cat >"${path[tgbot_compose]}" <<EOF
 version: "3"
+networks:
+  tgbot:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+      - subnet: 2001:0DB8::1:0/112
 services:
   tgbot:
     build: ./
@@ -701,6 +708,8 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - ../:/opt/reality-ezpz
+    networks:
+    - tgbot
 EOF
 }
 
@@ -1297,7 +1306,7 @@ function print_client_configuration {
   qrencode -t ansiutf8 "${client_config}"
   ipv6=$(get_ipv6)
   if [[ -n $ipv6 ]]; then
-    client_config_ipv6=$(echo "$client_config" | sed "s/@${config[server]}:/@[${ipv6}]:/")
+    client_config_ipv6=$(echo "$client_config" | sed "s/@${config[server]}:/@[${ipv6}]:/" | sed "s/#${username}/#${username}-ipv6/")
     echo ""
     echo "==================IPv6 Config======================"
     echo "Client configuration:"
@@ -2242,6 +2251,28 @@ EOF
   sysctl -qp /etc/sysctl.d/99-reality-ezpz.conf >/dev/null 2>&1 || true
 }
 
+function configure_docker {
+  local docker_config="/etc/docker/daemon.json"
+  local config_modified=false
+  local temp_file
+  temp_file=$(mktemp)
+  if [[ ! -f "${docker_config}" ]]; then
+    echo '{"experimental": true, "ip6tables": true}' | jq . > "${docker_config}"
+    config_modified=true
+  else
+    if jq 'if .experimental != true or .ip6tables != true then .experimental = true | .ip6tables = true else . end' "${docker_config}" | jq . > "${temp_file}"; then
+      if ! cmp --silent "${docker_config}" "${temp_file}"; then
+        mv "${temp_file}" "${docker_config}"
+        config_modified=true
+      fi
+    fi
+  fi
+  rm -f "${temp_file}"
+  if [[ "${config_modified}" = true ]] || ! systemctl is-active --quiet docker; then
+    sudo systemctl restart docker
+  fi
+}
+
 parse_args "$@" || show_help
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root."
@@ -2250,6 +2281,7 @@ fi
 generate_file_list
 install_packages
 install_docker
+configure_docker
 upgrade
 parse_config_file
 parse_users_file
