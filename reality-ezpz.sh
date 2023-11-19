@@ -948,7 +948,7 @@ function generate_engine_config {
     "servers": [
     $([[ ${config[safenet]} == ON ]] && echo '{"address": "tcp://1.1.1.3", "detour": "dns"},{"address": "tcp://1.0.0.3", "detour": "dns"}' || echo '{"address": "tcp://1.1.1.1", "detour": "dns"},{"address": "tcp://1.0.0.1", "detour": "dns"}')
     ],
-    "strategy": "ipv4_only"
+    "strategy": "prefer_ipv4"
   },
   "inbounds": [
     {
@@ -965,7 +965,7 @@ function generate_engine_config {
       "listen_port": 8443,
       "sniff": true,
       "sniff_override_destination": true,
-      "domain_strategy": "ipv4_only",
+      "domain_strategy": "prefer_ipv4",
       "users": [${users_object}],
       $(if [[ ${config[security]} == 'reality' ]]; then
         echo "${reality_object}"
