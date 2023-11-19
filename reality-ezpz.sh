@@ -2257,14 +2257,19 @@ function configure_docker {
   local config_modified=false
   local temp_file
   temp_file=$(mktemp)
-  if [[ ! -f "${docker_config}" ]]; then
+  if [[ ! -f "${docker_config}" ]] || [[ ! -s "${docker_config}" ]]; then
     echo '{"experimental": true, "ip6tables": true}' | jq . > "${docker_config}"
     config_modified=true
   else
-    if jq 'if .experimental != true or .ip6tables != true then .experimental = true | .ip6tables = true else . end' "${docker_config}" | jq . > "${temp_file}"; then
-      if ! cmp --silent "${docker_config}" "${temp_file}"; then
-        mv "${temp_file}" "${docker_config}"
-        config_modified=true
+    if ! jq . "${docker_config}" &> /dev/null; then
+      echo '{"experimental": true, "ip6tables": true}' | jq . > "${docker_config}"
+      config_modified=true
+    else
+      if jq 'if .experimental != true or .ip6tables != true then .experimental = true | .ip6tables = true else . end' "${docker_config}" | jq . > "${temp_file}"; then
+        if ! cmp --silent "${docker_config}" "${temp_file}"; then
+          mv "${temp_file}" "${docker_config}"
+          config_modified=true
+        fi
       fi
     fi
   fi
