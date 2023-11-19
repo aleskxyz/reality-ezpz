@@ -71,6 +71,8 @@ def show_user(update, context, username):
   context.bot.send_message(chat_id=update.effective_chat.id, text=f'Config for "{username}":')
   config_list=get_config_ezpz(username)
   for index, config in enumerate(config_list):
+    if config.endswith("-ipv6"):
+      config = "IPv6 Config:\n" + config
     if index == len(config_list) - 1:
       context.bot.send_message(chat_id=update.effective_chat.id, text=config, reply_markup=reply_markup)
     else:
