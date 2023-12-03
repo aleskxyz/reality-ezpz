@@ -341,7 +341,8 @@ function parse_args {
   fi
 
   if [[ -n ${args[restore]} ]]; then
-    restore
+    args[restart]=true
+    restore ${args[restore]}
   fi
 
   if [[ ${args[uninstall]} == true ]]; then
@@ -351,25 +352,46 @@ function parse_args {
   if [[ -n ${args[warp_license]} ]]; then
     args[warp]=ON
   fi
-
 }
 
 function backup {
-  lcoal backup_name
+  local backup_name
   local backup_file_url
   local exit_code
   backup_name=reality-ezpz-backup-$(date +%Y-%m-%d_%H-%M-%S).tar.gz
-  tar -czf /tmp/${backup_name} -C /opt/reality-ezpz/ ./
-  if ! backup_file_url=$(curl -fsS --upload-file /tmp/${backup_name} https://free.keep.sh); then
-    rm -f /tmp/${backup_name}
+  tar -czf "/tmp/${backup_name}" -C "${config_path}" ./
+  if ! backup_file_url=$(curl -fsS --upload-file "/tmp/${backup_name}" https://free.keep.sh); then
+    rm -f "/tmp/${backup_name}"
     echo "Error in uploading backup file"
     exit 1
   fi
-  rm -f /tmp/${backup_name}
+  rm -f "/tmp/${backup_name}"
   echo "You can download the backup file from this URL:"
-  echo ${backup_file_url}
+  echo "${backup_file_url}"
   echo "The URL is only valid for 24h."
   exit 0
+}
+
+function restore {
+  local backup_file=$1
+  local temp_file
+  if [[ ! -r ${backup_file} ]]; then
+    temp_file=$(mktemp -u)
+    if ! curl -fSsL "${backup_file}" -o "${temp_file}"; then
+      echo "Cannot download or find backup file"
+      exit 1
+    fi
+    backup_file="${temp_file}"
+  fi
+  if ! tar -tzf "${backup_file}" | grep -q config; then
+    echo "The provided file is not a reality-ezpz backup file."
+    rm -f "${temp_file}"
+    exit 1
+  fi
+  rm -rf "${config_path}"
+  mkdir -p "${config_path}"
+  tar -xzf "${backup_file}" -C "${config_path}"
+  rm -f "${temp_file}"
 }
 
 function dict_expander {
@@ -743,7 +765,7 @@ services:
       BOT_ADMIN: ${config[tgbot_admins]}
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - ../:/opt/reality-ezpz
+    - ../:${config_path}
     - /etc/docker/:/etc/docker/
     networks:
     - tgbot
@@ -889,7 +911,7 @@ EOF
 function generate_tgbot_dockerfile {
   cat >"${path[tgbot_dockerfile]}" << EOF
 FROM ${image[python]}
-WORKDIR /opt/reality-ezpz/tgbot
+WORKDIR ${config_path}/tgbot
 RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode sudo openssl jq
 RUN pip install --no-cache-dir python-telegram-bot==13.5
 CMD [ "python", "./tgbot.py" ]
@@ -1372,7 +1394,7 @@ function upgrade {
   local warp_id
   if [[ -e "${HOME}/reality/config" ]]; then
     ${docker_cmd} --project-directory "${HOME}/reality" down --remove-orphans --timeout 2
-    mv -f "${HOME}/reality" /opt/reality-ezpz
+    mv -f "${HOME}/reality" ${config_path}
   fi
   uuid=$(grep '^uuid=' "${path[config]}" 2>/dev/null | cut -d= -f2 || true)
   if [[ -n $uuid ]]; then
