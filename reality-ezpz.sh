@@ -128,7 +128,7 @@ function show_help {
   echo "      --list-users          List all users"
   echo "      --show-user <username> Shows the config and QR code of the user"
   echo "      --delete-user <username> Delete the user"
-  echo "      --backup              Backup and upload configuration to keep.sh"
+  echo "      --backup              Backup users and configuration and upload it to keep.sh"
   echo "      --restore <url|file>  Restore backup from URL or file"
   echo "  -h, --help                Display this help message"
   return 1
