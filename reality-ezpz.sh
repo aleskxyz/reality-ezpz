@@ -2109,7 +2109,14 @@ function backup_menu {
     return
   fi
   if result=$(backup 2>&1); then
-    message_box "Backup Successful" "You can download the backup file from here:\n${result}\nThe URL is valid for 24h."
+    echo "Backup has been create and uploaded successfully."
+    echo "You can download the backup file from here:"
+    echo "${result}"
+    echo ""
+    echo "The URL is valid for 24h."
+    echo
+    echo "Press Enter to return ..."
+    read
   else
     message_box "Backup Failed" "${result}"
   fi
