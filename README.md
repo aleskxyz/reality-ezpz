@@ -33,6 +33,8 @@ Features:
 * Supports Cloudflare warp+
 * Install with a single command
 * Telegram bot for user management
+* Create backup from users and configuration
+* Restore users and configuration from backup
 
 Supported OS:
 * Ubuntu 22.04
@@ -76,7 +78,7 @@ Help message of the script:
 Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
-  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]
+  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [-u|--uninstall]
 
   -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: tcp)
   -d, --domain <domain>     Domain to use as SNI (default: www.google.com)
@@ -100,6 +102,8 @@ Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--do
       --list-users          List all users
       --show-user <username> Shows the config and QR code of the user
       --delete-user <username> Delete the user
+      --backup              Backup users and configuration and upload it to keep.sh
+      --restore <url|file>  Restore backup from URL or file
   -h, --help                Display this help message
 ```
 
@@ -279,6 +283,30 @@ Default engine core is sing-box but you can also switch to xray by using `--core
 bash <(curl -sL https://bit.ly/realityez) -c xray
 ```
 Valid options are `xray` and `sing-box`.
+
+### Create backup
+You can create a backup from users and configuration and upload it to free.keep.sh by using `--backup` option:
+```
+bash <(curl -sL https://bit.ly/realityez) --backup
+```
+This command will give you a URL to download you backup file. The URL is only valid for 24h.
+
+### Restore backup
+You can restore a previously created backup file with `--restore` option.
+
+You need to give the path or URL of the backup file to restore:
+```
+bash <(curl -sL https://bit.ly/realityez) --restore /path/to/backup.tar.gz
+```
+or
+```
+bash <(curl -sL https://bit.ly/realityez) --restore "https://www.example.com/backup.tar.gz"
+```
+
+You can migrate users and configuration from one server to another by:
+
+1. Create backup in the old server and copy the URL of backup file
+1. Restore the URL of backup file in the new server
 
 ### Text-based user interface (TUI)
 You can also use the TUI for changing the configuration of the service.
