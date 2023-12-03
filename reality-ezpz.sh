@@ -390,7 +390,12 @@ function restore {
   fi
   rm -rf "${config_path}"
   mkdir -p "${config_path}"
-  tar -xzf "${backup_file}" -C "${config_path}"
+  if ! tar -xzf "${backup_file}" -C "${config_path}"; then
+    echo "Error in backup restore."
+    rm -f "${temp_file}"
+    exit 1
+  fi
+  echo "Backup has been restored successfully."
   rm -f "${temp_file}"
 }
 
