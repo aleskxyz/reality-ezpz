@@ -98,6 +98,8 @@ regex[ip]="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
 regex[tgbot_token]="^[0-9]{8,10}:[a-zA-Z0-9_-]{35}$"
 regex[tgbot_admins]="^[a-zA-Z][a-zA-Z0-9_]{4,31}(,[a-zA-Z][a-zA-Z0-9_]{4,31})*$"
 regex[domain_port]="^[a-zA-Z0-9]+([-.][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}(:[1-9][0-9]*)?$"
+regex[file_path]="^[a-zA-Z0-9_/.-]+$"
+regex[url]="^(http|https)://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[0-9]{1,3}(\.[0-9]{1,3}){3})(:[0-9]{1,5})?(/.*)?$"
 
 function show_help {
   echo ""
@@ -320,6 +322,10 @@ function parse_args {
         ;;
       --restore)
         args[restore]="$2"
+        if [[ ! ${args[restore]} =~ ${regex[file_path]} ]] && [[ ! ${args[restore]} =~ ${regex[url]} ]]; then
+          echo "Invalid: Backup file path or URL is not valid."
+          return 1
+        fi
         shift 2
         ;;
       -h|--help)
@@ -335,15 +341,6 @@ function parse_args {
         ;;
     esac
   done
-
-  if [[ ${args[backup]} == true ]]; then
-    backup
-  fi
-
-  if [[ -n ${args[restore]} ]]; then
-    args[restart]=true
-    restore ${args[restore]}
-  fi
 
   if [[ ${args[uninstall]} == true ]]; then
     uninstall
@@ -362,14 +359,12 @@ function backup {
   tar -czf "/tmp/${backup_name}" -C "${config_path}" ./
   if ! backup_file_url=$(curl -fsS --upload-file "/tmp/${backup_name}" https://free.keep.sh); then
     rm -f "/tmp/${backup_name}"
-    echo "Error in uploading backup file"
-    exit 1
+    echo "Error in uploading backup file" >&2
+    return 1
   fi
   rm -f "/tmp/${backup_name}"
-  echo "You can download the backup file from this URL:"
   echo "${backup_file_url}"
-  echo "The URL is only valid for 24h."
-  exit 0
+  return
 }
 
 function restore {
@@ -378,25 +373,25 @@ function restore {
   if [[ ! -r ${backup_file} ]]; then
     temp_file=$(mktemp -u)
     if ! curl -fSsL "${backup_file}" -o "${temp_file}"; then
-      echo "Cannot download or find backup file"
-      exit 1
+      echo "Cannot download or find backup file" >&2
+      return 1
     fi
     backup_file="${temp_file}"
   fi
   if ! tar -tzf "${backup_file}" | grep -q config; then
-    echo "The provided file is not a reality-ezpz backup file."
+    echo "The provided file is not a reality-ezpz backup file." >&2
     rm -f "${temp_file}"
-    exit 1
+    return 1
   fi
   rm -rf "${config_path}"
   mkdir -p "${config_path}"
   if ! tar -xzf "${backup_file}" -C "${config_path}"; then
-    echo "Error in backup restore."
+    echo "Error in backup restore." >&2
     rm -f "${temp_file}"
-    exit 1
+    return 1
   fi
-  echo "Backup has been restored successfully."
   rm -f "${temp_file}"
+  return
 }
 
 function dict_expander {
@@ -1505,7 +1500,7 @@ function add_user_menu {
       break
     fi
     view_user_menu "${username}"
-  done   
+  done
 }
 
 function delete_user_menu {
@@ -1717,6 +1712,8 @@ function configuration_menu {
       "10" "Restart Services" \
       "11" "Regenerate Keys" \
       "12" "Restore Defaults" \
+      "13" "Backup" \
+      "14" "Restore Backup" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1757,6 +1754,12 @@ function configuration_menu {
         ;;
       12 )
         restore_defaults_menu
+        ;;
+      13 )
+        backup_menu
+        ;;
+      14 )
+        restore_backup_menu
         ;;
     esac
   done
@@ -2093,6 +2096,57 @@ function config_tgbot_menu {
   config[tgbot_admins]=$old_tgbot_admins
 }
 
+function backup_menu {
+  local result
+  whiptail \
+    --clear \
+    --backtitle "$BACKTITLE" \
+    --title "Backup" \
+    --yesno "Do you want to create a backup from users and configuration?" \
+    $HEIGHT $WIDTH \
+    3>&1 1>&2 2>&3
+  if [[ $? -ne 0 ]]; then
+    return
+  fi
+  if result=$(backup 2>&1); then
+    message_box "Backup Successful" "You can download the backup file from here:\n${result}\nThe URL is valid for 24h."
+  else
+    message_box "Backup Failed" "${result}"
+  fi
+}
+
+function restore_backup_menu {
+  local backup_file
+  local result
+  while true; do
+    backup_file=$(whiptail \
+      --clear \
+      --backtitle "$BACKTITLE" \
+      --title "Restore Backup" \
+      --inputbox "Enter backup file path or URL" \
+      $HEIGHT $WIDTH \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      break
+    fi
+    if [[ ! $backup_file =~ ${regex[file_path]} ]] && [[ ! $backup_file =~ ${regex[url]} ]]; then
+      message_box "Invalid Backup path of URL" "Backup file path or URL is not valid."
+      continue
+    fi
+    if result=$(restore ${backup_file} 2>&1); then
+      parse_config_file
+      parse_users_file
+      build_config
+      update_config_file
+      update_users_file
+      message_box "Backup Restore Successful" "Backup has been restored successfully."
+      break
+    else
+      message_box "Backup Restore Failed" "${result}"
+    fi
+  done
+}
+
 function restart_docker_compose {
   ${docker_cmd} --project-directory ${config_path} -p ${compose_project} down --remove-orphans --timeout 2 || true
   ${docker_cmd} --project-directory ${config_path} -p ${compose_project} up --build -d --remove-orphans --build
@@ -2356,6 +2410,19 @@ parse_args "$@" || show_help
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root."
     exit 1
+fi
+if [[ ${args[backup]} == true ]]; then
+  if backup_url=$(backup); then
+    echo "Backup created successfully. You can download the backup file from this address:"
+    echo "${backup_url}"
+    echo "The URL is valid for 24h."
+  fi
+fi
+if [[ -n ${args[restore]} ]]; then
+  if restore ${args[restore]}; then
+    args[restart]=true
+    echo "Backup has been restored successfully."
+  fi
 fi
 generate_file_list
 install_packages
