@@ -1712,7 +1712,7 @@ function configuration_menu {
       "10" "Restart Services" \
       "11" "Regenerate Keys" \
       "12" "Restore Defaults" \
-      "13" "Backup" \
+      "13" "Create Backup" \
       "14" "Restore Backup" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
