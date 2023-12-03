@@ -879,6 +879,7 @@ function generate_engine_config {
   local tls_object=""
   local warp_object=""
   local reality_port=443
+  local temp_file
   if [[ ${config[transport]} == 'tuic' ]]; then
     type='tuic'
   elif [[ ${config[transport]} == 'hysteria2' ]]; then
@@ -1222,6 +1223,15 @@ EOF
   }
 }
 EOF
+  fi
+  if [[ -r ${config_path}/${config[core]}.patch ]]; then
+    if ! jq empty ${config_path}/${config[core]}.patch; then
+      echo "${config[core]}.patch is not a valid json file. Fix it or remove it!"
+      exit 1
+    fi
+    temp_file=$(mktemp)
+    jq -s add ${path[engine]} ${config_path}/${config[core]}.patch > ${temp_file}
+    mv ${temp_file} ${path[engine]}
   fi
 }
 
