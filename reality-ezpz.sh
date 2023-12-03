@@ -360,7 +360,7 @@ function backup {
   local exit_code
   backup_name=reality-ezpz-backup-$(date +%Y-%m-%d_%H-%M-%S).tar.gz
   tar -czf /tmp/${backup_name} -C /opt/reality-ezpz/ ./
-  if ! backup_file_url=$(curl -fsS --upload-file /tmp/${backup_name} https://free.keep.sh)
+  if ! backup_file_url=$(curl -fsS --upload-file /tmp/${backup_name} https://free.keep.sh); then
     rm -f /tmp/${backup_name}
     echo "Error in uploading backup file"
     exit 1
