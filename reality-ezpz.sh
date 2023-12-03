@@ -104,7 +104,7 @@ function show_help {
   echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
   [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
-  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [-u|--uninstall]"
+  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url>] [-u|--uninstall]"
   echo ""
   echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
@@ -128,13 +128,15 @@ function show_help {
   echo "      --list-users          List all users"
   echo "      --show-user <username> Shows the config and QR code of the user"
   echo "      --delete-user <username> Delete the user"
+  echo "      --backup Backup and upload configuration to keep.sh"
+  echo "      --restore <url> Restore backup from URL"
   echo "  -h, --help                Display this help message"
   return 1
 }
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,backup,restore:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -312,6 +314,14 @@ function parse_args {
         args[delete_user]="$2"
         shift 2
         ;;
+      --backup)
+        args[backup]=true
+        shift
+        ;;
+      --restore)
+        args[restore]="$2"
+        shift 2
+        ;;
       -h|--help)
         return 1
         ;;
@@ -326,6 +336,14 @@ function parse_args {
     esac
   done
 
+  if [[ ${args[backup]} == true ]]; then
+    backup
+  fi
+
+  if [[ -n ${args[restore]} ]]; then
+    restore
+  fi
+
   if [[ ${args[uninstall]} == true ]]; then
     uninstall
   fi
@@ -334,6 +352,24 @@ function parse_args {
     args[warp]=ON
   fi
 
+}
+
+function backup {
+  lcoal backup_name
+  local backup_file_url
+  local exit_code
+  backup_name=reality-ezpz-backup-$(date +%Y-%m-%d_%H-%M-%S).tar.gz
+  tar -czf /tmp/${backup_name} -C /opt/reality-ezpz/ ./
+  if ! backup_file_url=$(curl -fsS --upload-file /tmp/${backup_name} https://free.keep.sh)
+    rm -f /tmp/${backup_name}
+    echo "Error in uploading backup file"
+    exit 1
+  fi
+  rm -f /tmp/${backup_name}
+  echo "You can download the backup file from this URL:"
+  echo ${backup_file_url}
+  echo "The URL is only valid for 24h."
+  exit 0
 }
 
 function dict_expander {
