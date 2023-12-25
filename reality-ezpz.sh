@@ -912,7 +912,7 @@ function generate_tgbot_dockerfile {
   cat >"${path[tgbot_dockerfile]}" << EOF
 FROM ${image[python]}
 WORKDIR ${config_path}/tgbot
-RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode sudo openssl jq
+RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode-tools sudo openssl jq
 RUN pip install --no-cache-dir python-telegram-bot==13.5
 CMD [ "python", "./tgbot.py" ]
 EOF
