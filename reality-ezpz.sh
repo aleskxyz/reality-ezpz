@@ -278,7 +278,7 @@ function parse_args {
           echo "Invalid Telegram Bot Token: ${args[tgbot_token]}"
           return 1
         fi 
-        if ! curl -sSfL "https://api.telegram.org/bot${args[tgbot_token]}/getMe" >/dev/null 2>&1; then
+        if ! curl -sSfL -m 3 "https://api.telegram.org/bot${args[tgbot_token]}/getMe" >/dev/null 2>&1; then
           echo "Invalid Telegram Bot Token: Telegram Bot Token is incorrect. Check it again."
           return 1
         fi
@@ -357,7 +357,7 @@ function backup {
   local exit_code
   backup_name=reality-ezpz-backup-$(date +%Y-%m-%d_%H-%M-%S).tar.gz
   tar -czf "/tmp/${backup_name}" -C "${config_path}" ./
-  if ! backup_file_url=$(curl -fsS --upload-file "/tmp/${backup_name}" https://free.keep.sh); then
+  if ! backup_file_url=$(curl -fsS -m 30 --upload-file "/tmp/${backup_name}" https://free.keep.sh); then
     rm -f "/tmp/${backup_name}"
     echo "Error in uploading backup file" >&2
     return 1
@@ -372,7 +372,7 @@ function restore {
   local temp_file
   if [[ ! -r ${backup_file} ]]; then
     temp_file=$(mktemp -u)
-    if ! curl -fSsL "${backup_file}" -o "${temp_file}"; then
+    if ! curl -fSsL -m 30 "${backup_file}" -o "${temp_file}"; then
       echo "Cannot download or find backup file" >&2
       return 1
     fi
@@ -655,7 +655,7 @@ function install_packages {
 
 function install_docker {
   if ! which docker >/dev/null 2>&1; then
-    curl -fsSL https://get.docker.com | bash
+    curl -fsSL -m 5 https://get.docker.com | bash
     systemctl enable --now docker
     docker_cmd="docker compose"
     return 0
@@ -668,7 +668,7 @@ function install_docker {
     docker_cmd="docker-compose"
     return 0
   fi
-  curl -fsSL https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  curl -fsSL -m 30 https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
   docker_cmd="docker-compose"
   return 0
@@ -919,7 +919,7 @@ EOF
 }
 
 function download_tgbot_script {
-  curl -fsSL https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/tgbot.py -o "${path[tgbot_script]}"
+  curl -fsSL -m 3 https://raw.githubusercontent.com/aleskxyz/reality-ezpz/master/tgbot.py -o "${path[tgbot_script]}"
 }
 
 function generate_selfsigned_certificate {
@@ -1318,7 +1318,7 @@ function generate_config {
 }
 
 function get_ipv6 {
-  curl -fsSL --ipv6 https://cloudflare.com/cdn-cgi/trace 2> /dev/null | grep ip | cut -d '=' -f2
+  curl -fsSL -m 3 --ipv6 https://cloudflare.com/cdn-cgi/trace 2> /dev/null | grep ip | cut -d '=' -f2
 }
 
 function print_client_configuration {
@@ -2069,7 +2069,7 @@ function config_tgbot_menu {
         message_box "Invalid Input" "Invalid Telegram Bot Token"
         continue
       fi 
-      if ! curl -sSfL "https://api.telegram.org/bot${tgbot_token}/getMe" >/dev/null 2>&1; then
+      if ! curl -sSfL -m 3 "https://api.telegram.org/bot${tgbot_token}/getMe" >/dev/null 2>&1; then
         message_box "Invalid Input" "Telegram Bot Token is incorrect. Check it again."
         continue
       fi
@@ -2196,7 +2196,7 @@ function warp_api {
   if [[ -n ${team_token} ]]; then
     headers+=("Cf-Access-Jwt-Assertion: ${team_token}")
   fi
-  command="curl -sLX ${verb} -w '%{http_code}' -o ${temp_file} ${endpoint}${resource}"
+  command="curl -sLX ${verb} -m 3 -w '%{http_code}' -o ${temp_file} ${endpoint}${resource}"
   for header in "${headers[@]}"; do
     command+=" -H '${header}'"
   done
