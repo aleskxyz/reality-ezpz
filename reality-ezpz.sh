@@ -972,6 +972,7 @@ function generate_engine_config {
     if [[ ${config[warp]} == 'ON' ]]; then
       warp_object='{
         "type": "wireguard",
+        "tag": "warp",
         "server": "engage.cloudflareclient.com",
         "server_port": 2408,
         "system_interface": false,
@@ -1005,7 +1006,7 @@ function generate_engine_config {
   },
   "dns": {
     "servers": [
-    $([[ ${config[safenet]} == ON ]] && echo '{"address": "tcp://1.1.1.3", "detour": "dns"},{"address": "tcp://1.0.0.3", "detour": "dns"}' || echo '{"address": "tcp://1.1.1.1", "detour": "dns"},{"address": "tcp://1.0.0.1", "detour": "dns"}')
+    $([[ ${config[safenet]} == ON ]] && echo '{"address": "tcp://1.1.1.3", "detour": "internet"},{"address": "tcp://1.0.0.3", "detour": "internet"}' || echo '{"address": "tcp://1.1.1.1", "detour": "internet"},{"address": "tcp://1.0.0.1", "detour": "internet"}')
     ],
     "strategy": "prefer_ipv4"
   },
@@ -1052,17 +1053,18 @@ function generate_engine_config {
     }
   ],
   "outbounds": [
-    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || echo '{"type": "direct"},')
     {
       "type": "direct",
-      "tag": "dns"
+      "tag": "internet"
     },
+    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || true)
     {
       "type": "block",
       "tag": "block"
     }
   ],
   "route": {
+    "final": "$([[ ${config[warp]} == ON ]] && echo "warp" || echo "internet")",
     "rules": [
       {
         "geoip": [
@@ -1143,6 +1145,7 @@ EOF
     if [[ ${config[warp]} == 'ON' ]]; then
       warp_object='{
         "protocol": "wireguard",
+        "tag": "warp",
         "settings": {
           "secretKey": "'"${config[warp_private_key]}"'",
           "address": [
@@ -1188,6 +1191,7 @@ EOF
       "listen": "0.0.0.0",
       "port": 8443,
       "protocol": "vless",
+      "tag": "inbound",
       "settings": {
         "clients": [${users_object}],
         "decryption": "none"
@@ -1215,7 +1219,11 @@ EOF
     }
   ],
   "outbounds": [
-    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || echo '{"protocol": "freedom"},')
+    {
+      "protocol": "freedom",
+      "tag": "internet"
+    },
+    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || true)
     {
       "protocol": "blackhole",
       "tag": "block"
@@ -1268,6 +1276,11 @@ EOF
           "domain:sunlight-leds.com",
           "domain:icecyber.org"
         ]
+      },
+      {
+        "type": "field",
+        "inboundTag": "inbound",
+        "outboundTag": "$([[ ${config[warp]} == ON ]] && echo "warp" || echo "internet")"
       }
     ]
   },
