@@ -1220,8 +1220,8 @@ function upgrade {
     ${docker_cmd} --project-directory ${config_path} down --remove-orphans --timeout 2
   fi
   if [[ -r ${path[config]} ]]; then
+    sed -i '/^core=/d' "${path[config]}"
     sed -i 's|transport=h2|transport=http|g' "${path[config]}"
-    sed -i 's|core=singbox|core=sing-box|g' "${path[config]}"
     sed -i 's|security=tls-invalid|security=selfsigned|g' "${path[config]}"
     sed -i 's|security=tls-valid|security=letsencrypt|g' "${path[config]}"
   fi
@@ -1237,7 +1237,6 @@ function upgrade {
     warp_api "DELETE" "/reg/${warp_id}" "" "${warp_token}" >/dev/null 2>&1 || true
     rm -rf "${config_path}/warp"
   fi
-  sed -i '/^core=/d' "${path[config]}"
 }
 
 function main_menu {
