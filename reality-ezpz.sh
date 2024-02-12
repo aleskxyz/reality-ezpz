@@ -38,7 +38,6 @@ HEIGHT=30
 WIDTH=60
 CHOICE_HEIGHT=20
 
-image[xray]="teddysun/xray:1.8.4"
 image[sing-box]="gzxhwq/sing-box:v1.6.5"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
@@ -58,7 +57,6 @@ defaults[warp_id]=""
 defaults[warp_client_id]=""
 defaults[warp_interface_ipv4]=""
 defaults[warp_interface_ipv6]=""
-defaults[core]=sing-box
 defaults[security]=reality
 defaults[server]=$(curl -fsSL --ipv4 https://cloudflare.com/cdn-cgi/trace | grep ip | cut -d '=' -f2)
 defaults[tgbot]=OFF
@@ -66,7 +64,6 @@ defaults[tgbot_token]=""
 defaults[tgbot_admins]=""
 
 config_items=(
-  "core"
   "security"
   "service_path"
   "public_key"
@@ -103,10 +100,11 @@ regex[url]="^(http|https)://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[0-9]{1,3}(\.[0-9]{1,3
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
-  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
-  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
-  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [-u|--uninstall]"
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>]
+  [--regenerate] [--default] [-r|--restart] [--enable-safenet=true|false] [--port=<port>]
+  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu]
+  [--show-server-config] [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>]
+  [--backup] [--restore=<url|file>] [-u|--uninstall]"
   echo ""
   echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
@@ -119,7 +117,6 @@ function show_help {
   echo "      --port <port>         Server port (default: ${defaults[port]})"
   echo "      --enable-warp <true|false> Enable or disable Cloudflare warp"
   echo "      --warp-license <warp-license> Add Cloudflare warp+ license"
-  echo "  -c  --core <sing-box|xray> Select core (xray, sing-box, default: ${defaults[core]})"
   echo "      --security <reality|letsencrypt|selfsigned> Select type of TLS encryption (reality, letsencrypt, selfsigned, default: ${defaults[security]})" 
   echo "  -m  --menu                Show menu"
   echo "      --enable-tgbot <true|false> Enable Telegram bot for user management"
@@ -138,7 +135,7 @@ function show_help {
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,backup,restore:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:rumh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,backup,restore:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -231,18 +228,6 @@ function parse_args {
           return 1
         fi
         shift 2
-        ;;
-      -c|--core)
-        args[core]="$2"
-        case ${args[core]} in
-          xray|sing-box)
-            shift 2
-            ;;
-          *)
-            echo "Invalid core: ${args[core]}"
-            return 1
-            ;;
-        esac
         ;;
       --security)
         args[security]="$2"
@@ -527,16 +512,8 @@ function build_config {
     echo 'You cannot use "tuic" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to letsencrypt or selfsigned'
     exit 1
   fi
-  if [[ ${config[transport]} == 'tuic' && ${config[core]} == 'xray' ]]; then
-    echo 'You cannot use "tuic" transport with "xray" core. Use other transports or change core to sing-box'
-    exit 1
-  fi
   if [[ ${config[transport]} == 'hysteria2' && ${config[security]} == 'reality' ]]; then
     echo 'You cannot use "hysteria2" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to letsencrypt or selfsigned'
-    exit 1
-  fi
-  if [[ ${config[transport]} == 'hysteria2' && ${config[core]} == 'xray' ]]; then
-    echo 'You cannot use "hysteria2" transport with "xray" core. Use other transports or change core to sing-box'
     exit 1
   fi
   if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
@@ -613,9 +590,9 @@ function update_users_file {
 
 function generate_keys {
   local key_pair
-  key_pair=$(docker run --rm ${image[xray]} xray x25519)
-  config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
-  config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
+  key_pair=$(docker run --rm ${image[sing-box]} generate reality-keypair)
+  config_file[public_key]=$(echo "${key_pair}" | grep 'PublicKey:' | awk '{print $3}')
+  config_file[private_key]=$(echo "${key_pair}" | grep 'PrivateKey:' | awk '{print $3}')
   config_file[short_id]=$(openssl rand -hex 8)
   config_file[service_path]=$(openssl rand -hex 4)
 }
@@ -686,7 +663,7 @@ networks:
       - subnet: fc11::1:0/112
 services:
   engine:
-    image: ${image[${config[core]}]}
+    image: ${image[sing-box]}
     $([[ ${config[security]} == 'reality' ]] && echo "ports:" || true)
     $([[ ${config[security]} == 'reality' && ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
     $([[ ${config[security]} == 'reality' ]] && echo "- ${config[port]}:8443" || true)
@@ -698,9 +675,9 @@ services:
     environment:
       TZ: Etc/UTC
     volumes:
-    - ./${path[engine]#${config_path}/}:/etc/${config[core]}/config.json
-    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]] || [[ ${config[transport]} == 'hysteria2' ]]; } && echo "- ./${path[server_crt]#${config_path}/}:/etc/${config[core]}/server.crt" || true)
-    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]] || [[ ${config[transport]} == 'hysteria2' ]]; } && echo "- ./${path[server_key]#${config_path}/}:/etc/${config[core]}/server.key" || true)
+    - ./${path[engine]#${config_path}/}:/etc/sing-box/config.json
+    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]] || [[ ${config[transport]} == 'hysteria2' ]]; } && echo "- ./${path[server_crt]#${config_path}/}:/etc/sing-box/server.crt" || true)
+    $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]] || [[ ${config[transport]} == 'hysteria2' ]]; } && echo "- ./${path[server_key]#${config_path}/}:/etc/sing-box/server.key" || true)
     networks:
     - reality
 $(if [[ ${config[security]} != 'reality' ]]; then
@@ -825,10 +802,8 @@ $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
 "; fi)
 $(if [[ ${config[transport]} == 'grpc' ]]; then echo "
   server engine engine:8443 check tfo proto h2
-"; elif [[ ${config[transport]} == 'http' && ${config[core]} == 'sing-box' ]]; then echo "
+"; elif [[ ${config[transport]} == 'http' ]]; then echo "
   server engine engine:8443 check tfo proto h2 ssl verify none
-"; elif [[ ${config[transport]} == 'http' && ${config[core]} != 'sing-box' ]]; then echo "
-  server engine engine:8443 check tfo ssl verify none
 "; else echo "
   server engine engine:8443 check tfo
 "; fi)
@@ -948,56 +923,55 @@ function generate_engine_config {
   if [[ ${config[security]} == 'reality' && ${config[domain]} =~ ":" ]]; then
     reality_port="${config[domain]#*:}"
   fi
-  if [[ ${config[core]} == 'sing-box' ]]; then
-    reality_object='"tls": {
+  reality_object='"tls": {
+    "enabled": true,
+    "server_name": "'"${config[domain]%%:*}"'",
+    "alpn": [],
+    "reality": {
       "enabled": true,
-      "server_name": "'"${config[domain]%%:*}"'",
-      "alpn": [],
-      "reality": {
-        "enabled": true,
-        "handshake": {
-          "server": "'"${config[domain]%%:*}"'",
-          "server_port": '"${reality_port}"'
-        },
-        "private_key": "'"${config[private_key]}"'",
-        "short_id": ["'"${config[short_id]}"'"],
-        "max_time_difference": "1m"
-      }
-    }'
-    tls_object='"tls": {
-      "enabled": true,
-      "certificate_path": "/etc/sing-box/server.crt",
-      "key_path": "/etc/sing-box/server.key"
-    }'
-    if [[ ${config[warp]} == 'ON' ]]; then
-      warp_object='{
-        "type": "wireguard",
-        "server": "engage.cloudflareclient.com",
-        "server_port": 2408,
-        "system_interface": false,
-        "local_address": [
-          "'"${config[warp_interface_ipv4]}"'/32",
-          "'"${config[warp_interface_ipv6]}"'/128"
-        ],
-        "private_key": "'"${config[warp_private_key]}"'",
-        "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
-        "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
-        "mtu": 1280
-      },'
+      "handshake": {
+        "server": "'"${config[domain]%%:*}"'",
+        "server_port": '"${reality_port}"'
+      },
+      "private_key": "'"${config[private_key]}"'",
+      "short_id": ["'"${config[short_id]}"'"],
+      "max_time_difference": "1m"
+    }
+  }'
+  tls_object='"tls": {
+    "enabled": true,
+    "certificate_path": "/etc/sing-box/server.crt",
+    "key_path": "/etc/sing-box/server.key"
+  }'
+  if [[ ${config[warp]} == 'ON' ]]; then
+    warp_object='{
+      "type": "wireguard",
+      "server": "engage.cloudflareclient.com",
+      "server_port": 2408,
+      "system_interface": false,
+      "local_address": [
+        "'"${config[warp_interface_ipv4]}"'/32",
+        "'"${config[warp_interface_ipv6]}"'/128"
+      ],
+      "private_key": "'"${config[warp_private_key]}"'",
+      "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+      "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
+      "mtu": 1280
+    },'
+  fi
+  for user in "${!users[@]}"; do
+    if [ -n "$users_object" ]; then
+      users_object="${users_object},"$'\n'
     fi
-    for user in "${!users[@]}"; do
-      if [ -n "$users_object" ]; then
-        users_object="${users_object},"$'\n'
-      fi
-      if [[ ${config[transport]} == 'tuic' ]]; then
-        users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
-      elif [[ ${config[transport]} == 'hysteria2' ]]; then
-        users_object=${users_object}'{"password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
-      else
-        users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
-      fi
-    done
-    cat >"${path[engine]}" <<EOF
+    if [[ ${config[transport]} == 'tuic' ]]; then
+      users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
+    elif [[ ${config[transport]} == 'hysteria2' ]]; then
+      users_object=${users_object}'{"password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
+    else
+      users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
+    fi
+  done
+  cat >"${path[engine]}" <<EOF
 {
   "log": {
     "level": "error",
@@ -1120,175 +1094,13 @@ function generate_engine_config {
   }
 }
 EOF
-  fi
-  if [[ ${config[core]} == 'xray' ]]; then
-    reality_object='"security":"reality",
-    "realitySettings":{
-      "show": false,
-      "dest": "'"${config[domain]%%:*}"':'"${reality_port}"'",
-      "xver": 0,
-      "serverNames": ["'"${config[domain]%%:*}"'"],
-      "privateKey": "'"${config[private_key]}"'",
-      "maxTimeDiff": 60000,
-      "shortIds": ["'"${config[short_id]}"'"]
-    }'
-    tls_object='"security": "tls",
-    "tlsSettings": {
-      "certificates": [{
-        "oneTimeLoading": true,
-        "certificateFile": "/etc/xray/server.crt",
-        "keyFile": "/etc/xray/server.key"
-      }]
-    }'
-    if [[ ${config[warp]} == 'ON' ]]; then
-      warp_object='{
-        "protocol": "wireguard",
-        "settings": {
-          "secretKey": "'"${config[warp_private_key]}"'",
-          "address": [
-            "'"${config[warp_interface_ipv4]}"'/32",
-            "'"${config[warp_interface_ipv6]}"'/128"
-          ],
-          "peers": [
-            {
-              "endpoint": "engage.cloudflareclient.com:2408",
-              "publicKey": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
-            }
-          ],
-          "mtu": 1280
-        }
-      },'
-    fi
-    for user in "${!users[@]}"; do
-      if [ -n "$users_object" ]; then
-        users_object="${users_object},"$'\n'
-      fi
-      users_object=${users_object}'{"id": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "email": "'"${user}"'"}'
-    done
-    cat >"${path[engine]}" <<EOF
-{
-  "log": {
-    "loglevel": "error"
-  },
-  "dns": {
-    "servers": [$([[ ${config[safenet]} == ON ]] && echo '"tcp+local://1.1.1.3","tcp+local://1.0.0.3"' || echo '"tcp+local://1.1.1.1","tcp+local://1.0.0.1"')]
-  },
-  "inbounds": [
-    {
-      "listen": "0.0.0.0",
-      "port": 8080,
-      "protocol": "dokodemo-door",
-      "settings": {
-        "address": "${config[domain]%%:*}",
-        "port": 80,
-        "network": "tcp"
-      }
-    },
-    {
-      "listen": "0.0.0.0",
-      "port": 8443,
-      "protocol": "vless",
-      "settings": {
-        "clients": [${users_object}],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        $([[ ${config[transport]} == 'grpc' ]] && echo '"grpcSettings": {"serviceName": "'"${config[service_path]}"'"},' || true)
-        $([[ ${config[transport]} == 'ws' ]] && echo '"wsSettings": {"headers": {"Host": "'"${config[server]}"'"}, "path": "/'"${config[service_path]}"'"},' || true)
-        $([[ ${config[transport]} == 'http' ]] && echo '"httpSettings": {"host":["'"${config[server]}"'"], "path": "/'"${config[service_path]}"'"},' || true)
-        "network": "${config[transport]}",
-        $(if [[ ${config[security]} == 'reality' ]]; then
-          echo "${reality_object}"
-        elif [[ ${config[transport]} == 'http' || ${config[transport]} == 'tcp' ]]; then
-          echo "${tls_object}"
-        else
-          echo '"security":"none"'
-        fi)
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
-        ]
-      }
-    }
-  ],
-  "outbounds": [
-    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || echo '{"protocol": "freedom"},')
-    {
-      "protocol": "blackhole",
-      "tag": "block"
-    }
-  ],
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [
-      {
-        "type": "field",
-        "ip": [
-          $([[ ${config[warp]} == OFF ]] && echo '"geoip:cn", "geoip:ir",')
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
-          "127.0.0.0/8",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10",
-          "geoip:private"
-        ],
-        "outboundTag": "block"
-      },
-      {
-        "type": "field",
-        "port": "25, 587, 465, 2525",
-        "network": "tcp",
-        "outboundTag": "block"
-      },
-      {
-        "type": "field",
-        "protocol": ["bittorrent"],
-        "outboundTag": "block"
-      },
-      {
-        "type": "field",
-        "outboundTag": "block",
-        "domain": [
-          $([[ ${config[safenet]} == ON ]] && echo '"geosite:category-porn",' || true)
-          "geosite:category-ads-all",
-          "domain:pushnotificationws.com",
-          "domain:sunlight-leds.com",
-          "domain:icecyber.org"
-        ]
-      }
-    ]
-  },
-  "policy": {
-    "levels": {
-      "0": {
-        "handshake": 2,
-        "connIdle": 120
-      }
-    }
-  }
-}
-EOF
-  fi
-  if [[ -r ${config_path}/${config[core]}.patch ]]; then
-    if ! jq empty ${config_path}/${config[core]}.patch; then
-      echo "${config[core]}.patch is not a valid json file. Fix it or remove it!"
+  if [[ -r ${config_path}/sing-box.patch ]]; then
+    if ! jq empty ${config_path}/sing-box.patch; then
+      echo "sing-box.patch is not a valid json file. Fix it or remove it!"
       exit 1
     fi
     temp_file=$(mktemp)
-    jq -s add ${path[engine]} ${config_path}/${config[core]}.patch > ${temp_file}
+    jq -s add ${path[engine]} ${config_path}/sing-box.patch > ${temp_file}
     mv ${temp_file} ${path[engine]}
   fi
 }
@@ -1425,6 +1237,7 @@ function upgrade {
     warp_api "DELETE" "/reg/${warp_id}" "" "${warp_token}" >/dev/null 2>&1 || true
     rm -rf "${config_path}/warp"
   fi
+  sed -i '/^core=/d' "${path[config]}"
 }
 
 function main_menu {
@@ -1622,7 +1435,7 @@ function list_users_menu {
 
 function show_server_config {
   local server_config
-  server_config="Core: ${config[core]}"
+  server_config="Core: sing-box"
   server_config=$server_config$'\n'"Server Address: ${config[server]}"
   server_config=$server_config$'\n'"Domain SNI: ${config[domain]}"
   server_config=$server_config$'\n'"Port: ${config[port]}"
@@ -1700,93 +1513,64 @@ function configuration_menu {
   while true; do
     selection=$(whiptail --clear --backtitle "$BACKTITLE" --title "Configuration" \
       --menu "Select an option:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-      "1" "Core" \
-      "2" "Server Address" \
-      "3" "Transport" \
-      "4" "SNI Domain" \
-      "5" "Security" \
-      "6" "Port" \
-      "7" "Safe Internet" \
-      "8" "WARP" \
-      "9" "Telegram Bot" \
-      "10" "Restart Services" \
-      "11" "Regenerate Keys" \
-      "12" "Restore Defaults" \
-      "13" "Create Backup" \
-      "14" "Restore Backup" \
+      "1" "Server Address" \
+      "2" "Transport" \
+      "3" "SNI Domain" \
+      "4" "Security" \
+      "5" "Port" \
+      "6" "Safe Internet" \
+      "7" "WARP" \
+      "8" "Telegram Bot" \
+      "9" "Restart Services" \
+      "10" "Regenerate Keys" \
+      "11" "Restore Defaults" \
+      "12" "Create Backup" \
+      "13" "Restore Backup" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
     fi
     case $selection in
       1 )
-        config_core_menu
-        ;;
-      2 )
         config_server_menu
         ;;
-      3 )
+      2 )
         config_transport_menu
         ;;
-      4 )
+      3 )
         config_sni_domain_menu
         ;;
-      5 )
+      4 )
         config_security_menu
         ;;
-      6 )
+      5 )
         config_port_menu
         ;;
-      7 )
+      6 )
         config_safenet_menu
         ;;
-      8 )
+      7 )
         config_warp_menu
         ;;
-      9 )
+      8 )
         config_tgbot_menu
         ;;
-      10 )
+      9 )
         restart_menu
         ;;
-      11 )
+      10 )
         regenerate_menu
         ;;
-      12 )
+      11 )
         restore_defaults_menu
         ;;
-      13 )
+      12 )
         backup_menu
         ;;
-      14 )
+      13 )
         restore_backup_menu
         ;;
     esac
-  done
-}
-
-function config_core_menu {
-  local core
-  while true; do
-    core=$(whiptail --clear --backtitle "$BACKTITLE" --title "Core" \
-      --radiolist --noitem "Select a core engine:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
-      "xray" "$([[ "${config[core]}" == 'xray' ]] && echo 'on' || echo 'off')" \
-      "sing-box" "$([[ "${config[core]}" == 'sing-box' ]] && echo 'on' || echo 'off')" \
-      3>&1 1>&2 2>&3)
-    if [[ $? -ne 0 ]]; then
-      break
-    fi
-    if [[ ${core} == 'xray' && ${config[transport]} == 'tuic' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "xray" core with "tuic" transport. Change core to "sing-box" or use other transports'
-      continue
-    fi
-    if [[ ${core} == 'xray' && ${config[transport]} == 'hysteria2' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "xray" core with "hysteria2" transport. Change core to "sing-box" or use other transports'
-      continue
-    fi
-    config[core]=$core
-    update_config_file
-    break
   done
 }
 
@@ -1838,16 +1622,8 @@ function config_transport_menu {
       message_box 'Invalid Configuration' 'You cannot use "tuic" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "letsencrypt" or "selfsigned"'
       continue
     fi
-    if [[ ${transport} == 'tuic' && ${config[core]} == 'xray' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "tuic" transport with "xray" core. Use other transports or change core to "sing-box"'
-      continue
-    fi
     if [[ ${transport} == 'hysteria2' && ${config[security]} == 'reality' ]]; then
       message_box 'Invalid Configuration' 'You cannot use "hysteria2" transport with "reality" TLS certificate. Use other transports or change TLS certifcate to "letsencrypt" or "selfsigned"'
-      continue
-    fi
-    if [[ ${transport} == 'hysteria2' && ${config[core]} == 'xray' ]]; then
-      message_box 'Invalid Configuration' 'You cannot use "hysteria2" transport with "xray" core. Use other transports or change core to "sing-box"'
       continue
     fi
     config[transport]=$transport
