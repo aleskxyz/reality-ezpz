@@ -777,18 +777,15 @@ echo "
 global
   ssl-default-bind-options ssl-min-ver TLSv1.2
 defaults
-  retries 3
   option http-server-close
   timeout connect 5s
-  timeout client 5s
+  timeout client 50s
   timeout client-fin 1s
   timeout server-fin 1s
-  timeout server 5s
-  timeout tunnel 300s
+  timeout server 50s
+  timeout tunnel 50s
   timeout http-keep-alive 1s
-  timeout http-request 5s
   timeout queue 15s
-  timeout tarpit 5s
 frontend http
   mode http
   bind :::8080 v4v6
