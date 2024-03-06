@@ -75,14 +75,16 @@ You can also enable Telegram bot with `--enable-tgbot` option and manage users f
 
 Help message of the script:
 ```
-Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
-  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
-  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
-  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [-u|--uninstall]
+
+Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>]
+  [--regenerate] [--default] [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
+  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu]
+  [--show-server-config] [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>]
+  [--backup] [--restore=<url|file>] [--backup-password=<password>] [-u|--uninstall]
 
   -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: tcp)
   -d, --domain <domain>     Domain to use as SNI (default: www.google.com)
-      --server <server>     IP address or domain name of server (Must be a valid domain if using ws)
+      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)
       --regenerate          Regenerate public and private keys
       --default             Restore default configuration
   -r  --restart             Restart services
@@ -102,8 +104,9 @@ Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--do
       --list-users          List all users
       --show-user <username> Shows the config and QR code of the user
       --delete-user <username> Delete the user
-      --backup              Backup users and configuration and upload it to keep.sh
+      --backup              Backup users and configuration and upload it to temp.sh
       --restore <url|file>  Restore backup from URL or file
+      --backup-password <password> Create/Restore password protected backup file
   -h, --help                Display this help message
 ```
 
