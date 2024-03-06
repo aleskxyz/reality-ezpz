@@ -285,22 +285,26 @@ bash <(curl -sL https://bit.ly/realityez) -c xray
 Valid options are `xray` and `sing-box`.
 
 ### Create backup
-You can create a backup from users and configuration and upload it to free.keep.sh by using `--backup` option:
+You can create a backup from users and configuration and upload it to https://temp.sh/ by using `--backup` option.
+
+The `--backup-password` option allows you to protect the backup zip file with the specified password. (Optional)
 ```
-bash <(curl -sL https://bit.ly/realityez) --backup
+bash <(curl -sL https://bit.ly/realityez) --backup --backup-password "P@ssw0rd"
 ```
-This command will give you a URL to download you backup file. The URL is only valid for 24h.
+This command will give you a URL to download you backup file. The URL is only valid for 3 days.
 
 ### Restore backup
 You can restore a previously created backup file with `--restore` option.
 
-You need to give the path or URL of the backup file to restore:
+You need to give the path or URL of the backup file to restore.
+
+The `--backup-password` option allows you to restore the password protected backup zip file.
 ```
-bash <(curl -sL https://bit.ly/realityez) --restore /path/to/backup.tar.gz
+bash <(curl -sL https://bit.ly/realityez) --restore /path/to/backup.zip --backup-password "P@ssw0rd"
 ```
 or
 ```
-bash <(curl -sL https://bit.ly/realityez) --restore "https://www.example.com/backup.tar.gz"
+bash <(curl -sL https://bit.ly/realityez) --restore "https://www.example.com/backup.zip" --backup-password "P@ssw0rd"
 ```
 
 You can migrate users and configuration from one server to another by:
