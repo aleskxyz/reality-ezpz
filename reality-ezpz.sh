@@ -104,9 +104,9 @@ regex[url]="^(http|https)://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[0-9]{1,3}(\.[0-9]{1,3
 function show_help {
   echo ""
   echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
-  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box]
-  [--enable-warp=true|false] [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] 
-  [--add-user=<username>] [--lists-users] [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [-u|--uninstall]"
+  [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box] [--enable-warp=true|false]
+  [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] [--add-user=<username>] [--lists-users]
+  [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [--backup-password=<password>] [-u|--uninstall]"
   echo ""
   echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
@@ -130,15 +130,16 @@ function show_help {
   echo "      --list-users          List all users"
   echo "      --show-user <username> Shows the config and QR code of the user"
   echo "      --delete-user <username> Delete the user"
-  echo "      --backup              Backup users and configuration and upload it to keep.sh"
+  echo "      --backup              Backup users and configuration and upload it to temp.sh"
   echo "      --restore <url|file>  Restore backup from URL or file"
+  echo "      --backup-password <password> Create/Restore password protected backup file"
   echo "  -h, --help                Display this help message"
   return 1
 }
 
 function parse_args {
   local opts
-  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,backup,restore:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
+  opts=$(getopt -o t:d:ruc:mh --long transport:,domain:,server:,regenerate,default,restart,uninstall,enable-safenet:,port:,warp-license:,enable-warp:,core:,security:,menu,show-server-config,add-user:,list-users,show-user:,delete-user:,backup,restore:,backup-password:,enable-tgbot:,tgbot-token:,tgbot-admins:,help -- "$@")
   if [[ $? -ne 0 ]]; then
     return 1
   fi
@@ -328,6 +329,10 @@ function parse_args {
         fi
         shift 2
         ;;
+      --backup-password)
+        args[backup_password]="$2"
+        shift 2
+        ;;
       -h|--help)
         return 1
         ;;
@@ -353,40 +358,83 @@ function parse_args {
 
 function backup {
   local backup_name
+  local backup_password="$1"
   local backup_file_url
   local exit_code
-  backup_name=reality-ezpz-backup-$(date +%Y-%m-%d_%H-%M-%S).tar.gz
-  tar -czf "/tmp/${backup_name}" -C "${config_path}" ./
-  if ! backup_file_url=$(curl -fsS -m 30 --upload-file "/tmp/${backup_name}" https://free.keep.sh); then
+  backup_name="reality-ezpz-backup-$(date +%Y-%m-%d_%H-%M-%S).zip"
+  cd "${config_path}"
+  if [ -z "${backup_password}" ]; then
+    zip -r "/tmp/${backup_name}" . > /dev/null
+  else
+    zip -P "${backup_password}" -r "/tmp/${backup_name}" . > /dev/null
+  fi
+  if ! backup_file_url=$(curl -fsS -m 30 -F "file=@/tmp/${backup_name}" "https://temp.sh/upload"); then
     rm -f "/tmp/${backup_name}"
     echo "Error in uploading backup file" >&2
     return 1
   fi
   rm -f "/tmp/${backup_name}"
   echo "${backup_file_url}"
-  return
 }
 
 function restore {
-  local backup_file=$1
+  local backup_file="$1"
+  local backup_password="$2"
   local temp_file
+  local unzip_output
+  local unzip_exit_code
+  local current_state
   if [[ ! -r ${backup_file} ]]; then
     temp_file=$(mktemp -u)
-    if ! curl -fSsL -m 30 "${backup_file}" -o "${temp_file}"; then
-      echo "Cannot download or find backup file" >&2
-      return 1
+    if [[ "${backup_file}" =~ ^https?://temp\.sh/ ]]; then
+      if ! curl -fSsL -m 30 -X POST "${backup_file}" -o "${temp_file}"; then
+        echo "Cannot download or find backup file" >&2
+        return 1
+      fi
+    else
+      if ! curl -fSsL -m 30 "${backup_file}" -o "${temp_file}"; then
+        echo "Cannot download or find backup file" >&2
+        return 1
+      fi
     fi
     backup_file="${temp_file}"
   fi
-  if ! tar -tzf "${backup_file}" | grep -q config; then
-    echo "The provided file is not a reality-ezpz backup file." >&2
+  current_state=$(set +o)
+  set +e
+  if [[ -z "${backup_password}" ]]; then
+    unzip_output=$(unzip -P "" -t "${backup_file}" 2>&1)
+  else
+    unzip_output=$(unzip -P "${backup_password}" -t "${backup_file}" 2>&1)
+  fi
+  unzip_exit_code=$?
+  eval "$current_state"
+  if [[ ${unzip_exit_code} -eq 0 ]]; then
+    if ! echo "${unzip_output}" | grep -q 'config'; then
+      echo "The provided file is not a reality-ezpz backup file." >&2
+      rm -f "${temp_file}"
+      return 1
+    fi
+  else
+    if echo "${unzip_output}" | grep -q 'incorrect password'; then
+      echo "The provided password for backup file is incorrect." >&2
+    else
+      echo "An error occurred during zip file verification: ${unzip_output}" >&2
+    fi
     rm -f "${temp_file}"
     return 1
   fi
   rm -rf "${config_path}"
   mkdir -p "${config_path}"
-  if ! tar -xzf "${backup_file}" -C "${config_path}"; then
-    echo "Error in backup restore." >&2
+  set +e
+  if [[ -z "${backup_password}" ]]; then
+    unzip_output=$(unzip -d "${config_path}" "${backup_file}" 2>&1)
+  else
+    unzip_output=$(unzip -P "${backup_password}" -d "${config_path}" "${backup_file}" 2>&1)
+  fi
+  unzip_exit_code=$?
+  eval "$current_state"
+  if [[ ${unzip_exit_code} -ne 0 ]]; then
+    echo "Error in backup restore: ${unzip_output}" >&2
     rm -f "${temp_file}"
     return 1
   fi
@@ -636,16 +684,16 @@ function uninstall {
 }
 
 function install_packages {
-  if ! which qrencode whiptail jq xxd >/dev/null 2>&1; then
+  if ! which qrencode whiptail jq xxd zip unzip >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
       apt update
-      apt install qrencode whiptail jq xxd -y
+      DEBIAN_FRONTEND=noninteractive apt install qrencode whiptail jq xxd zip unzip -y
       return 0
     fi
     if which yum >/dev/null 2>&1; then
       yum makecache
       yum install epel-release -y || true
-      yum install qrencode newt jq vim-common -y
+      yum install qrencode newt jq vim-common zip unzip -y
       return 0
     fi
     echo "OS is not supported!"
@@ -909,7 +957,7 @@ function generate_tgbot_dockerfile {
   cat >"${path[tgbot_dockerfile]}" << EOF
 FROM ${image[python]}
 WORKDIR ${config_path}/tgbot
-RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode-tools sudo openssl jq
+RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode-tools sudo openssl jq zip unzip
 RUN pip install --no-cache-dir python-telegram-bot==13.5
 CMD [ "python", "./tgbot.py" ]
 EOF
@@ -1609,6 +1657,7 @@ $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" 
       echo
       echo "Press Enter to return ..."
       read
+      clear
     fi
     if [[ $# -gt 0 ]]; then
       return 0
@@ -2107,26 +2156,30 @@ function config_tgbot_menu {
 }
 
 function backup_menu {
+  local backup_password
   local result
-  whiptail \
+  backup_password=$(whiptail \
     --clear \
     --backtitle "$BACKTITLE" \
     --title "Backup" \
-    --yesno "Do you want to create a backup from users and configuration?" \
+    --inputbox "Choose a password for the backup file.\nLeave blank if you do not wish to set a password for the backup file." \
     $HEIGHT $WIDTH \
-    3>&1 1>&2 2>&3
+    3>&1 1>&2 2>&3)
   if [[ $? -ne 0 ]]; then
     return
   fi
-  if result=$(backup 2>&1); then
+  if result=$(backup "${backup_password}" 2>&1); then
+    clear
     echo "Backup has been create and uploaded successfully."
     echo "You can download the backup file from here:"
+    echo ""
     echo "${result}"
     echo ""
-    echo "The URL is valid for 24h."
+    echo "The URL is valid for 3 days."
     echo
     echo "Press Enter to return ..."
     read
+    clear
   else
     message_box "Backup Failed" "${result}"
   fi
@@ -2134,6 +2187,7 @@ function backup_menu {
 
 function restore_backup_menu {
   local backup_file
+  local backup_password
   local result
   while true; do
     backup_file=$(whiptail \
@@ -2150,13 +2204,24 @@ function restore_backup_menu {
       message_box "Invalid Backup path of URL" "Backup file path or URL is not valid."
       continue
     fi
-    if result=$(restore ${backup_file} 2>&1); then
+    backup_password=$(whiptail \
+      --clear \
+      --backtitle "$BACKTITLE" \
+      --title "Restore Backup" \
+      --inputbox "Enter backup file password.\nLeave blank if there is no password." \
+      $HEIGHT $WIDTH \
+      3>&1 1>&2 2>&3)
+    if [[ $? -ne 0 ]]; then
+      continue
+    fi
+    if result=$(restore "${backup_file}" "${backup_password}" 2>&1); then
       parse_config_file
       parse_users_file
       build_config
       update_config_file
       update_users_file
       message_box "Backup Restore Successful" "Backup has been restored successfully."
+      args[restart]=true
       break
     else
       message_box "Backup Restore Failed" "${result}"
@@ -2429,17 +2494,31 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 if [[ ${args[backup]} == true ]]; then
-  if backup_url=$(backup); then
+  if [[ -n ${args[backup_password]} ]]; then
+    backup_url=$(backup "${args[backup_password]}")
+  else
+    backup_url=$(backup)
+  fi
+  if [[ $? -eq 0 ]]; then
     echo "Backup created successfully. You can download the backup file from this address:"
     echo "${backup_url}"
-    echo "The URL is valid for 24h."
+    echo "The URL is valid for 3 days."
+    exit 0
   fi
 fi
 if [[ -n ${args[restore]} ]]; then
-  if restore ${args[restore]}; then
+  if [[ -n ${args[backup_password]} ]]; then
+    restore "${args[restore]}" "${args[backup_password]}"
+  else
+    restore "${args[restore]}"
+  fi
+  if [[ $? -eq 0 ]]; then
     args[restart]=true
     echo "Backup has been restored successfully."
   fi
+  echo "Press Enter to continue ..."
+  read
+  clear
 fi
 generate_file_list
 install_packages
