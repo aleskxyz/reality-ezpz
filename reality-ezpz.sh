@@ -684,6 +684,9 @@ function uninstall {
 }
 
 function install_packages {
+  if [[ -n $BOT_TOKEN ]]; then 
+    return 0
+  fi
   if ! which qrencode whiptail jq xxd zip unzip >/dev/null 2>&1; then
     if which apt >/dev/null 2>&1; then
       apt update
