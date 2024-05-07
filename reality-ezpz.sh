@@ -1117,13 +1117,8 @@ function generate_engine_config {
       {
         "geoip": [
           $([[ ${config[warp]} == OFF ]] && echo '"cn", "ir",')
+          $([[ ${config[safenet]} == ON ]] && echo '"category-porn",' || true)
           "private"
-        ],
-        "outbound": "block"
-      },
-      {
-        "geosite": [
-          $([[ ${config[safenet]} == ON ]] && echo '"category-porn"' || true)
         ],
         "outbound": "block"
       },
