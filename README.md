@@ -25,7 +25,7 @@ Features:
 * You can regenerate configuration and keys
 * You can change SNI domain
 * You can change transport protocol (tcp, http, grpc, ws)
-* You can change tunneling protocol (vless, TUIC, hysteria2)
+* You can change tunneling protocol (vless, TUIC, hysteria2, shadowtls)
 * You can get valid TLS certificate with Letsencrypt
 * You can block malware and adult contents
 * Merges your custom advanced configuration
@@ -234,7 +234,7 @@ Valid options are `tcp`,`http`, `grpc`, `ws`, `tuic`, `hysteria2` and `shadowtls
 `shadowtls` is compatible with sing-box core only.
 
 #### ShadowTLS
-ShadowTLS is a TLS disguise proxy that can use someone else's trusted certificate. It is similar to "Reality," but in transport, it uses Shadowsocks.
+ShadowTLS is a TLS disguise proxy that can use someone else's trusted certificate. It is similar to "Reality," but in transport, it uses Shadowsocks. So you need to assign a working SNI to it.
 
 When you enable ShadowTLS, you will configure two proxies: ShadowTLS and Shadowsocks.
 
