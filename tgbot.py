@@ -13,7 +13,7 @@ def get_users_ezpz():
   local_command = command + '--list-users'
   return run_command(local_command).split('\n')[:-1]
 def get_config_ezpz(username):
-  local_command = command + f'--show-user {username} | grep ://'
+  local_command = command + f"--show-user {username} | grep -E '://|^{{\"dns\"'"
   return run_command(local_command).split('\n')[:-1]
 def delete_user_ezpz(username):
   local_command = command + f'--delete-user {username}'
@@ -70,8 +70,9 @@ def show_user(update, context, username):
   reply_markup = InlineKeyboardMarkup(keyboard)
   context.bot.send_message(chat_id=update.effective_chat.id, text=f'Config for "{username}":')
   config_list=get_config_ezpz(username)
+  ipv6_pattern = r'"server":"[0-9a-fA-F:]+"'
   for index, config in enumerate(config_list):
-    if config.endswith("-ipv6"):
+    if config.endswith("-ipv6") or re.search(ipv6_pattern, config):
       config = "IPv6 Config:\n" + config
     if index == len(config_list) - 1:
       context.bot.send_message(chat_id=update.effective_chat.id, text=config, reply_markup=reply_markup)
