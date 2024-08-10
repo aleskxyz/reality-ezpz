@@ -1147,38 +1147,51 @@ function generate_engine_config {
   ],
   "route": {
     "final": "$([[ ${config[warp]} == ON ]] && echo "warp" || echo "internet")",
+    "rule_set": [
+      {
+        "tag": "block",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/block.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "nsfw",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-nsfw.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "geoip-private",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geoip-private.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "geosite-private",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-private.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "bypass",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/bypass.srs",
+        "download_detour": "internet"
+      }
+    ],
     "rules": [
       {
-        "geoip": [
-          $([[ ${config[warp]} == OFF ]] && echo '"cn", "ir",')
-          "private"
-        ],
-        "outbound": "block"
-      },
-      {
-        "geosite": [
-          $([[ ${config[safenet]} == ON ]] && echo '"category-porn",' || true)
-          "category-ads-all"
-        ],
-        "outbound": "block"
-      },
-      {
-        "ip_cidr": [
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
-          "127.0.0.0/8",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10"
+        "rule_set": [
+          "block",
+          "geoip-private",
+          "geosite-private"
+          $([[ ${config[safenet]} == ON ]] && echo ',"nsfw"' || true)
+          $([[ ${config[warp]} == OFF ]] && echo ',"bypass"')
         ],
         "outbound": "block"
       },
@@ -1191,16 +1204,13 @@ function generate_engine_config {
           2525
         ],
         "outbound": "block"
-      },
-      {
-        "domain": [
-          "pushnotificationws.com",
-          "sunlight-leds.com",
-          "icecyber.org"
-        ],
-        "outbound": "block"
       }
     ]
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
   }
 }
 EOF
