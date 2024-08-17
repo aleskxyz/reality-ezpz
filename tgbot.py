@@ -69,7 +69,7 @@ def users_list(update, context, text, callback):
 def show_user(update, context, username):
     keyboard = [[InlineKeyboardButton('Back', callback_data='show_user')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+    context.bot.send_message(chat_id=update.effective_chat.id, text=f'Config for "{username}":', parse_mode='HTML')
     config_list = get_config_ezpz(username)
     ipv6_pattern = r'"server":"[0-9a-fA-F:]+"'
     
