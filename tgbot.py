@@ -3,6 +3,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler
 import re
 import subprocess
+import io
+import qrcode
 
 token = os.environ['BOT_TOKEN']
 admin = os.environ['BOT_ADMIN']
@@ -65,21 +67,24 @@ def users_list(update, context, text, callback):
 
 @restricted
 def show_user(update, context, username):
-  keyboard = []
-  keyboard.append([InlineKeyboardButton('Back', callback_data='show_user')])
-  reply_markup = InlineKeyboardMarkup(keyboard)
-  context.bot.send_message(chat_id=update.effective_chat.id, text=f'Config for "{username}":', parse_mode='HTML')
-  config_list=get_config_ezpz(username)
-  ipv6_pattern = r'"server":"[0-9a-fA-F:]+"'
-  for index, config in enumerate(config_list):
-    if config.endswith("-ipv6") or re.search(ipv6_pattern, config):
-      config = f"IPv6 Config:\n<pre>{config}</pre>"
-    else:
-      config = f"<pre>{config}</pre>"
-    if index == len(config_list) - 1:
-      context.bot.send_message(chat_id=update.effective_chat.id, text=config, reply_markup=reply_markup, parse_mode='HTML')
-    else:
-      context.bot.send_message(chat_id=update.effective_chat.id, text=config, parse_mode='HTML')
+    keyboard = [[InlineKeyboardButton('Back', callback_data='show_user')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    config_list = get_config_ezpz(username)
+    ipv6_pattern = r'"server":"[0-9a-fA-F:]+"'
+    
+    for config in config_list:
+        if config.endswith("-ipv6") or re.search(ipv6_pattern, config):
+            config_text = f"IPv6 Config:\n<pre>{config}</pre>"
+        else:
+            config_text = f"<pre>{config}</pre>"
+        
+        qr_img = qrcode.make(config)
+        bio = io.BytesIO()
+        qr_img.save(bio, 'PNG')
+        bio.seek(0)
+        
+        context.bot.send_photo(chat_id=update.effective_chat.id, photo=bio, caption=config_text, parse_mode='HTML', reply_markup=reply_markup)
 
 @restricted
 def delete_user(update, context, username):
