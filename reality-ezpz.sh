@@ -39,7 +39,7 @@ WIDTH=60
 CHOICE_HEIGHT=20
 
 image[xray]="teddysun/xray:1.8.4"
-image[sing-box]="gzxhwq/sing-box:v1.6.5"
+image[sing-box]="gzxhwq/sing-box:1.8.14"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
@@ -103,12 +103,12 @@ regex[url]="^(http|https)://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[0-9]{1,3}(\.[0-9]{1,3
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2|shadowtls] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box] [--enable-warp=true|false]
   [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] [--add-user=<username>] [--lists-users]
   [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [--backup-password=<password>] [-u|--uninstall]"
   echo ""
-  echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, default: ${defaults[transport]})"
+  echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2|shadowtls> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, shadowtls, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
   echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
   echo "      --regenerate          Regenerate public and private keys"
@@ -149,7 +149,7 @@ function parse_args {
       -t|--transport)
         args[transport]="$2"
         case ${args[transport]} in
-          tcp|http|grpc|ws|tuic|hysteria2)
+          tcp|http|grpc|ws|tuic|hysteria2|shadowtls)
             shift 2
             ;;
           *)
@@ -587,6 +587,10 @@ function build_config {
     echo 'You cannot use "hysteria2" transport with "xray" core. Use other transports or change core to sing-box'
     exit 1
   fi
+  if [[ ${config[transport]} == 'shadowtls' && ${config[core]} == 'xray' ]]; then
+    echo 'You cannot use "shadowtls" transport with "xray" core. Use other transports or change core to sing-box'
+    exit 1
+  fi
   if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
     if lsof -i :80 >/dev/null 2>&1; then
       free_80=false
@@ -602,13 +606,13 @@ function build_config {
       exit 1
     fi
   fi
-  if [[ -n "${args[security]}" && "${args[security]}" == 'reality' && "${config_file[security]}" != 'reality' ]]; then
+  if [[ (-n "${args[security]}" || -n "${args[transport]}") && ("${args[security]}" == 'reality' || "${args[transport]}" == 'shadowtls') && ("${config_file[security]}" != 'reality' && "${config_file[transport]}" != 'shadowtls') ]]; then
     config[domain]="${defaults[domain]}"
   fi
-  if [[ -n "${args[security]}" && "${args[security]}" != 'reality' && "${config_file[security]}" == 'reality' ]]; then
+  if [[ (-n "${args[security]}" || -n "${args[transport]}") && ("${args[security]}" != 'reality' && "${args[transport]}" != 'shadowtls') && ("${config_file[security]}" == 'reality' || "${config_file[transport]}" == 'shadowtls') ]]; then
     config[domain]="${config[server]}"
   fi
-  if [[ -n "${args[server]}" && "${config[security]}" != 'reality' ]]; then
+  if [[ -n "${args[server]}" && ("${config[security]}" != 'reality' && "${config[transport]}" != 'shadowtls') ]]; then
     config[domain]="${config[server]}"
   fi
   if [[ -n "${args[warp]}" && "${args[warp]}" == 'OFF' && "${config_file[warp]}" == 'ON' ]]; then
@@ -719,7 +723,7 @@ function install_docker {
     docker_cmd="docker-compose"
     return 0
   fi
-  curl -fsSL -m 30 https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  curl -fsSL -m 30 https://github.com/docker/compose/releases/download/v2.28.0/docker-compose-linux-$(uname -m) -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
   docker_cmd="docker-compose"
   return 0
@@ -738,13 +742,13 @@ networks:
 services:
   engine:
     image: ${image[${config[core]}]}
-    $([[ ${config[security]} == 'reality' ]] && echo "ports:" || true)
-    $([[ ${config[security]} == 'reality' && ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
-    $([[ ${config[security]} == 'reality' ]] && echo "- ${config[port]}:8443" || true)
+    $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "ports:" || true)
+    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
+    $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "- ${config[port]}:8443" || true)
     $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "ports:" || true)
     $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "- ${config[port]}:8443/udp" || true)
-    $([[ ${config[security]} != 'reality' ]] && echo "expose:" || true)
-    $([[ ${config[security]} != 'reality' ]] && echo "- 8443" || true)
+    $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "expose:" || true)
+    $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "- 8443" || true)
     restart: always
     environment:
       TZ: Etc/UTC
@@ -754,13 +758,15 @@ services:
     $([[ ${config[security]} != 'reality' ]] && { [[ ${config[transport]} == 'http' ]] || [[ ${config[transport]} == 'tcp' ]] || [[ ${config[transport]} == 'tuic' ]] || [[ ${config[transport]} == 'hysteria2' ]]; } && echo "- ./${path[server_key]#${config_path}/}:/etc/${config[core]}/server.key" || true)
     networks:
     - reality
-$(if [[ ${config[security]} != 'reality' ]]; then
+$(if [[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]]; then
 echo "
   nginx:
     image: ${image[nginx]}
     expose:
     - 80
     restart: always
+    volumes:
+    - ./website:/usr/share/nginx/html
     networks:
     - reality
   haproxy:
@@ -775,7 +781,7 @@ echo "
     networks:
     - reality"
 fi)
-$(if [[ ${config[security]} == 'letsencrypt' ]]; then
+$(if [[ ${config[security]} == 'letsencrypt' && ${config[transport]} != 'shadowtls' ]]; then
 echo "
   certbot:
     build:
@@ -789,6 +795,7 @@ echo "
     - ./$(dirname "${path[server_pem]#${config_path}/}"):/certificate
     - ./${path[certbot_deployhook]#${config_path}/}:/deployhook.sh
     - ./${path[certbot_startup]#${config_path}/}:/startup.sh
+    - ./website:/website
     networks:
     - reality
     entrypoint: /bin/sh
@@ -907,13 +914,17 @@ awk -F= '{print \$2}' | tr -d : | tr '[:upper:]' '[:lower:]')
   fi
 fi
 while true; do
-  response=\$(curl -skL --max-time 3 http://${config[server]})
-  if echo "\$response" | grep 'Welcome to nginx!' >/dev/null; then
+  ls -d /website/* | grep -E '^/website/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\$'|xargs rm -f
+  uuid=\$(uuidgen)
+  echo "\$uuid" > "/website/\$uuid"
+  response=\$(curl -skL --max-time 3 http://${config[server]}/\$uuid)
+  if echo "\$response" | grep \$uuid >/dev/null; then
     break
   fi
   echo "Domain ${config[server]} is not pointing to the server"
   sleep 5
 done
+ls -d /website/* | grep -E '^/website/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\$'|xargs rm -f
 while true; do
   certbot certonly -n \\
     --standalone \\
@@ -952,7 +963,7 @@ EOF
 function generate_certbot_dockerfile {
   cat >"${path[certbot_dockerfile]}" << EOF
 FROM ${image[certbot]}
-RUN apk add --no-cache docker-cli-compose curl
+RUN apk add --no-cache docker-cli-compose curl uuidgen
 EOF
 }
 
@@ -961,7 +972,7 @@ function generate_tgbot_dockerfile {
 FROM ${image[python]}
 WORKDIR ${config_path}/tgbot
 RUN apk add --no-cache docker-cli-compose curl bash newt libqrencode-tools sudo openssl jq zip unzip
-RUN pip install --no-cache-dir python-telegram-bot==13.5
+RUN pip install --no-cache-dir python-telegram-bot==13.5 qrcode[pil]==7.4.2
 CMD [ "python", "./tgbot.py" ]
 EOF
 }
@@ -990,10 +1001,12 @@ function generate_engine_config {
     type='tuic'
   elif [[ ${config[transport]} == 'hysteria2' ]]; then
     type='hysteria2'
+  elif [[ ${config[transport]} == 'shadowtls' ]]; then
+    type='shadowtls'
   else
     type='vless'
   fi
-  if [[ ${config[security]} == 'reality' && ${config[domain]} =~ ":" ]]; then
+  if [[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[domain]} =~ ":" ]]; then
     reality_port="${config[domain]#*:}"
   fi
   if [[ ${config[core]} == 'sing-box' ]]; then
@@ -1042,6 +1055,8 @@ function generate_engine_config {
         users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
       elif [[ ${config[transport]} == 'hysteria2' ]]; then
         users_object=${users_object}'{"password": "'"$(echo -n "${user}${users[${user}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)"'", "name": "'"${user}"'"}'
+      elif [[ ${config[transport]} == 'shadowtls' ]]; then
+        users_object=${users_object}'{"password": "'"${users[${user}]}"'", "name": "'"${user}"'"}'
       else
         users_object=${users_object}'{"uuid": "'"${users[${user}]}"'", "flow": "'"$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"'", "name": "'"${user}"'"}'
       fi
@@ -1075,10 +1090,12 @@ function generate_engine_config {
       "sniff_override_destination": true,
       "domain_strategy": "prefer_ipv4",
       "users": [${users_object}],
-      $(if [[ ${config[security]} == 'reality' ]]; then
+      $(if [[ ${config[security]} == 'reality' && ${config[transport]} != 'shadowtls' ]]; then
         echo "${reality_object}"
       elif [[ ${config[transport]} == 'http' || ${config[transport]} == 'tcp' || ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]]; then
         echo "${tls_object}"
+      elif [[ ${config[transport]} == 'shadowtls' ]]; then
+        :
       else
         echo '"tls":{"enabled": false}'
       fi)
@@ -1097,8 +1114,25 @@ function generate_engine_config {
       if [[ ${config[transport]} == hysteria2 ]]; then
       echo ',"obfs": {"type": "salamander", "password": "'"${config[service_path]}"'"}, "ignore_client_bandwidth": true, "masquerade": "https://'"${config[server]}:${config[port]}"'"'
       fi
+      if [[ ${config[transport]} == shadowtls ]]; then
+      echo '"version": 3, "strict_mode": false, "detour": "shadowsocks", "handshake": {"server": "'"${config[domain]%%:*}"'", "server_port": '"${reality_port}"'}'
+      fi
       )
     }
+    $(if [[ ${config[transport]} == 'shadowtls' ]]; then
+    echo ', {
+      "type": "shadowsocks",
+      "tag": "shadowsocks",
+      "listen": "127.0.0.1",
+      "listen_port": 8444,
+      "sniff": true,
+      "sniff_override_destination": true,
+      "domain_strategy": "prefer_ipv4",
+      "method": "chacha20-ietf-poly1305",
+      "password": "'"${config[private_key]}"'",
+      "users": ['"${users_object}"']
+    }'
+    fi )
   ],
   "outbounds": [
     {
@@ -1113,32 +1147,51 @@ function generate_engine_config {
   ],
   "route": {
     "final": "$([[ ${config[warp]} == ON ]] && echo "warp" || echo "internet")",
-    "rules": [
+    "rule_set": [
       {
-        "geoip": [
-          $([[ ${config[warp]} == OFF ]] && echo '"cn", "ir",')
-          $([[ ${config[safenet]} == ON ]] && echo '"category-porn",' || true)
-          "private"
-        ],
-        "outbound": "block"
+        "tag": "block",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/block.srs",
+        "download_detour": "internet"
       },
       {
-        "ip_cidr": [
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
-          "127.0.0.0/8",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10"
+        "tag": "nsfw",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-nsfw.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "geoip-private",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geoip-private.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "geosite-private",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-private.srs",
+        "download_detour": "internet"
+      },
+      {
+        "tag": "bypass",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/bypass.srs",
+        "download_detour": "internet"
+      }
+    ],
+    "rules": [
+      {
+        "rule_set": [
+          "block",
+          "geoip-private",
+          "geosite-private"
+          $([[ ${config[safenet]} == ON ]] && echo ',"nsfw"' || true)
+          $([[ ${config[warp]} == OFF ]] && echo ',"bypass"')
         ],
         "outbound": "block"
       },
@@ -1151,16 +1204,13 @@ function generate_engine_config {
           2525
         ],
         "outbound": "block"
-      },
-      {
-        "domain": [
-          "pushnotificationws.com",
-          "sunlight-leds.com",
-          "icecyber.org"
-        ],
-        "outbound": "block"
       }
     ]
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
   }
 }
 EOF
@@ -1350,14 +1400,14 @@ EOF
 function generate_config {
   generate_docker_compose
   generate_engine_config
-  if [[ ${config[security]} != "reality" ]]; then
+  if [[ ${config[security]} != "reality" && ${config[transport]} != 'shadowtls' ]]; then
     mkdir -p "${config_path}/certificate"
     generate_haproxy_config
     if [[ ! -r "${path[server_pem]}" || ! -r "${path[server_crt]}" || ! -r "${path[server_key]}" ]]; then
       generate_selfsigned_certificate
     fi
   fi
-  if [[ ${config[security]} == "letsencrypt" ]]; then
+  if [[ ${config[security]} == "letsencrypt" && ${config[transport]} != 'shadowtls' ]]; then
     mkdir -p "${config_path}/certbot"
     generate_certbot_deployhook
     generate_certbot_dockerfile
@@ -1397,6 +1447,8 @@ function print_client_configuration {
     client_config="${client_config}/?obfs=salamander&obfs-password=${config[service_path]}"
     client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&insecure=1" || true)"
     client_config="${client_config}#${username}"
+  elif [[ ${config[transport]} == 'shadowtls' ]]; then
+    client_config='{"dns":{"independent_cache":true,"rules":[{"domain":["dns.google"],"server":"dns-direct"}],"servers":[{"address":"https://dns.google/dns-query","address_resolver":"dns-direct","strategy":"ipv4_only","tag":"dns-remote"},{"address":"local","address_resolver":"dns-local","detour":"direct","strategy":"ipv4_only","tag":"dns-direct"},{"address":"local","detour":"direct","tag":"dns-local"},{"address":"rcode://success","tag":"dns-block"}]},"inbounds":[{"listen":"127.0.0.1","listen_port":6450,"override_address":"8.8.8.8","override_port":53,"tag":"dns-in","type":"direct"},{"domain_strategy":"","endpoint_independent_nat":true,"inet4_address":["172.19.0.1/28"],"mtu":9000,"sniff":true,"sniff_override_destination":false,"stack":"mixed","tag":"tun-in","auto_route":true,"type":"tun"},{"domain_strategy":"","listen":"127.0.0.1","listen_port":2080,"sniff":true,"sniff_override_destination":false,"tag":"mixed-in","type":"mixed"}],"log":{"level":"warning"},"outbounds":[{"method":"chacha20-ietf-poly1305","password":"'"${users[${username}]}"'","server":"127.0.0.1","server_port":1080,"type":"shadowsocks","udp_over_tcp":true,"domain_strategy":"","tag":"proxy","detour":"shadowtls"},{"password":"'"${users[${username}]}"'","server":"'"${config[server]}"'","server_port":'"${config[port]}"',"tls":{"enabled":true,"insecure":false,"server_name":"'"${config[domain]%%:*}"'","utls":{"enabled":true,"fingerprint":"chrome"}},"version":3,"type":"shadowtls","domain_strategy":"","tag":"shadowtls"},{"tag":"direct","type":"direct"},{"tag":"bypass","type":"direct"},{"tag":"block","type":"block"},{"tag":"dns-out","type":"dns"}],"route":{"auto_detect_interface":true,"rule_set":[],"rules":[{"outbound":"dns-out","port":[53]},{"inbound":["dns-in"],"outbound":"dns-out"},{"ip_cidr":["224.0.0.0/3","ff00::/8"],"outbound":"block","source_ip_cidr":["224.0.0.0/3","ff00::/8"]}]}}'
   else
     client_config="vless://"
     client_config="${client_config}${users[${username}]}"
@@ -1429,7 +1481,11 @@ function print_client_configuration {
   qrencode -t ansiutf8 "${client_config}"
   ipv6=$(get_ipv6)
   if [[ -n $ipv6 ]]; then
-    client_config_ipv6=$(echo "$client_config" | sed "s/@${config[server]}:/@[${ipv6}]:/" | sed "s/#${username}/#${username}-ipv6/")
+    if [[ ${config[transport]} != 'shadowtls' ]]; then
+      client_config_ipv6=$(echo "$client_config" | sed "s/@${config[server]}:/@[${ipv6}]:/" | sed "s/#${username}/#${username}-ipv6/")
+    else
+      client_config_ipv6=$(echo "$client_config" | sed "s/\"server\":\"${config[server]}\"/\"server\":\"${ipv6}\"/")
+    fi
     echo ""
     echo "==================IPv6 Config======================"
     echo "Client configuration:"
@@ -1616,6 +1672,27 @@ Port: ${config[port]}
 Password: $(echo -n "${username}${users[${username}]}" | sha256sum | cut -d ' ' -f 1 | head -c 16)
 OBFS Type: salamander
 OBFS Password: ${config[service_path]}
+      " | tr -s '\n')
+    elif [[ ${config[transport]} == 'shadowtls' ]]; then
+      user_config=$(echo "
+=== First item of the chain proxy ===
+Protocol: shadowtls
+Remarks: ${username}-shadowtls
+Address: ${config[server]}
+Port: ${config[port]}
+Password: ${users[$username]}
+Protocol Version: 3
+SNI: ${config[domain]%%:*}
+Fingerprint: chrome
+=== Second item of the chain proxy ===
+Protocol: shadowsocks
+Remarks: ${username}-shadowsocks
+Address: 127.0.0.1
+Port: 1080
+Password: ${users[$username]}
+Encryption Method: chacha20-ietf-poly1305
+UDP over TCP: true
+
       " | tr -s '\n')
     else
       user_config=$(echo "
@@ -1839,6 +1916,10 @@ function config_core_menu {
       message_box 'Invalid Configuration' 'You cannot use "xray" core with "hysteria2" transport. Change core to "sing-box" or use other transports'
       continue
     fi
+    if [[ ${core} == 'xray' && ${config[transport]} == 'shadowtls' ]]; then
+      message_box 'Invalid Configuration' 'You cannot use "xray" core with "shadowtls" transport. Change core to "sing-box" or use other transports'
+      continue
+    fi
     config[core]=$core
     update_config_file
     break
@@ -1862,7 +1943,7 @@ function config_server_menu {
       server="${defaults[server]}"
     fi
     config[server]="${server}"
-    if [[ ${config[security]} != 'reality' ]]; then
+    if [[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]]; then
       config[domain]="${server}"
     fi
     update_config_file
@@ -1881,6 +1962,7 @@ function config_transport_menu {
       "ws" "$([[ "${config[transport]}" == 'ws' ]] && echo 'on' || echo 'off')" \
       "tuic" "$([[ "${config[transport]}" == 'tuic' ]] && echo 'on' || echo 'off')" \
       "hysteria2" "$([[ "${config[transport]}" == 'hysteria2' ]] && echo 'on' || echo 'off')" \
+      "shadowtls" "$([[ "${config[transport]}" == 'shadowtls' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -1903,6 +1985,10 @@ function config_transport_menu {
     fi
     if [[ ${transport} == 'hysteria2' && ${config[core]} == 'xray' ]]; then
       message_box 'Invalid Configuration' 'You cannot use "hysteria2" transport with "xray" core. Use other transports or change core to "sing-box"'
+      continue
+    fi
+    if [[ ${transport} == 'shadowtls' && ${config[core]} == 'xray' ]]; then
+      message_box 'Invalid Configuration' 'You cannot use "shadowtls" transport with "xray" core. Use other transports or change core to "sing-box"'
       continue
     fi
     config[transport]=$transport
@@ -1974,10 +2060,10 @@ function config_security_menu {
         continue
       fi
     fi
-    if [[ ${security} != 'reality' ]]; then
+    if [[ ${security} != 'reality' && ${config[transport]} != 'shadowtls' ]]; then
       config[domain]="${config[server]}"
     fi
-    if [[ ${security} == 'reality' ]]; then
+    if [[ ${security} == 'reality' || ${config[transport]} == 'shadowtls' ]]; then
       config[domain]="${defaults[domain]}"
     fi
     config[security]="${security}"
