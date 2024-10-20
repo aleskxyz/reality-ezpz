@@ -1152,35 +1152,35 @@ function generate_engine_config {
         "tag": "block",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/block.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/block.srs",
         "download_detour": "internet"
       },
       {
         "tag": "nsfw",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-nsfw.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/geosite-nsfw.srs",
         "download_detour": "internet"
       },
       {
         "tag": "geoip-private",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geoip-private.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/geoip-private.srs",
         "download_detour": "internet"
       },
       {
         "tag": "geosite-private",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-private.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/geosite-private.srs",
         "download_detour": "internet"
       },
       {
         "tag": "bypass",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/bypass.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/bypass.srs",
         "download_detour": "internet"
       }
     ],
