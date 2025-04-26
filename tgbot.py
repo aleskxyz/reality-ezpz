@@ -294,13 +294,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Delete the message with the inline keyboard to avoid stale buttons
-    if query.message:
-        try:
-            await query.message.delete()
-        except Exception as e:
-            print(f"Could not delete message: {e}")
-
     response = query.data.split("!")
     if len(response) == 1:
         if response[0] == "start":
