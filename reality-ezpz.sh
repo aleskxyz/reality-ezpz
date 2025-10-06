@@ -38,13 +38,13 @@ HEIGHT=30
 WIDTH=60
 CHOICE_HEIGHT=20
 
-image[xray]="teddysun/xray:25.3.6"
-image[sing-box]="gzxhwq/sing-box:1.11.8"
-image[nginx]="nginx:1.27.5"
-image[certbot]="certbot/certbot:v4.0.0"
-image[haproxy]="haproxy:3.1.7"
+image[xray]="teddysun/xray:25.9.11"
+image[sing-box]="gzxhwq/sing-box:1.12.9"
+image[nginx]="nginx:1.29.1"
+image[certbot]="certbot/certbot:v5.0.0"
+image[haproxy]="haproxy:3.2.6"
 image[python]="python:3.13-alpine"
-image[wgcf]="virb3/wgcf:2.2.26"
+image[wgcf]="virb3/wgcf:2.2.29"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
@@ -120,7 +120,7 @@ function show_help {
   echo "      --enable-warp <true|false> Enable or disable Cloudflare warp"
   echo "      --warp-license <warp-license> Add Cloudflare warp+ license"
   echo "  -c  --core <sing-box|xray> Select core (xray, sing-box, default: ${defaults[core]})"
-  echo "      --security <reality|letsencrypt|selfsigned> Select type of TLS encryption (reality, letsencrypt, selfsigned, default: ${defaults[security]})" 
+  echo "      --security <reality|letsencrypt|selfsigned> Select type of TLS encryption (reality, letsencrypt, selfsigned, default: ${defaults[security]})"
   echo "  -m  --menu                Show menu"
   echo "      --enable-tgbot <true|false> Enable Telegram bot for user management"
   echo "      --tgbot-token <token> Token of Telegram bot"
@@ -278,7 +278,7 @@ function parse_args {
         if [[ ! ${args[tgbot_token]} =~ ${regex[tgbot_token]} ]]; then
           echo "Invalid Telegram Bot Token: ${args[tgbot_token]}"
           return 1
-        fi 
+        fi
         if ! curl -sSfL -m 3 "https://api.telegram.org/bot${args[tgbot_token]}/getMe" >/dev/null 2>&1; then
           echo "Invalid Telegram Bot Token: Telegram Bot Token is incorrect. Check it again."
           return 1
@@ -638,7 +638,7 @@ function build_config {
       config[warp_license]=""
       warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
       echo "WARP has been disabled due to the license error."
-    fi 
+    fi
   fi
 }
 
@@ -688,7 +688,7 @@ function uninstall {
 }
 
 function install_packages {
-  if [[ -n $BOT_TOKEN ]]; then 
+  if [[ -n $BOT_TOKEN ]]; then
     return 0
   fi
   if ! which qrencode whiptail jq xxd zip unzip >/dev/null 2>&1; then
@@ -751,6 +751,7 @@ services:
     $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "- 8443" || true)
     restart: always
     environment:
+      ENABLE_DEPRECATED_WIREGUARD_OUTBOUND: "true"
       TZ: Etc/UTC
     volumes:
     - ./${path[engine]#${config_path}/}:/etc/${config[core]}/config.json
