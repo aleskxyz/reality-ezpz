@@ -44,7 +44,7 @@ image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
 image[python]="python:3.11-alpine"
-image[wgcf]="virb3/wgcf:2.2.18"
+image[wgcf]="virb3/wgcf:2.2.29"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
@@ -559,10 +559,6 @@ function build_config {
     echo 'To enable Telegram bot, you have to give the list of authorized Telegram admins username with --tgbot-admins option.'
     exit 1
   fi
-  if [[ ${config[warp]} == 'ON' && -z ${config[warp_license]} ]]; then
-    echo 'To enable WARP+, you have to give WARP+ license with --warp-license option.'
-    exit 1
-  fi
   if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'letsencrypt' ]]; then
     echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "letsencrypt" as TLS certifcate.'
     exit 1
@@ -629,15 +625,13 @@ function build_config {
                                          -z ${config[warp_interface_ipv6]} ) ]]; }; then
     config[warp]='OFF'
     warp_create_account || exit 1
-    warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${config[warp_license]}" || exit 1
     config[warp]='ON'
   fi
-  if [[ -n ${args[warp_license]} && -n ${config_file[warp_license]} && "${args[warp_license]}" != "${config_file[warp_license]}" ]]; then
+  if [[ -n "${args[warp_license]}" && ( -z "${config_file[warp_license]}" || "${args[warp_license]}" != "${config_file[warp_license]}" ) ]]; then
     if ! warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${args[warp_license]}"; then
-      config[warp]='OFF'
       config[warp_license]=""
-      warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
-      echo "WARP has been disabled due to the license error."
+      echo "WARP+ license error! Please check your license and try again."
+      exit 1
     fi 
   fi
 }
@@ -2153,24 +2147,27 @@ function config_warp_menu {
     config[warp]=ON
     while true; do
       warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
-        --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
+        --inputbox "Enter WARP+ License:\nLeave blank if you only want to use free WARP account" $HEIGHT $WIDTH "${config[warp_license]}" \
         3>&1 1>&2 2>&3)
       if [[ $? -ne 0 ]]; then
         break
       fi
-      if [[ ! $warp_license =~ ${regex[warp_license]} ]]; then
+      if [[ -n "${warp_license}" && ! $warp_license =~ ${regex[warp_license]} ]]; then
         message_box "Invalid Input" "Invalid WARP+ License"
         continue
       fi
-      temp_file=$(mktemp)
-      warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${warp_license}" > "${temp_file}"
-      exit_code=$?
-      error=$(< "${temp_file}")
-      rm -f "${temp_file}"
-      if [[ ${exit_code} -ne 0 ]]; then
-        message_box "WARP license error" "${error}"
-        continue
+      if [[ -n "${warp_license}" ]]; then
+        temp_file=$(mktemp)
+        warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${warp_license}" > "${temp_file}"
+        exit_code=$?
+        error=$(< "${temp_file}")
+        rm -f "${temp_file}"
+        if [[ ${exit_code} -ne 0 ]]; then
+          message_box "WARP license error" "${error}"
+          continue
+        fi
       fi
+      update_config_file
       return
     done
   done
@@ -2338,13 +2335,13 @@ function warp_api {
   local data=$3
   local token=$4
   local team_token=$5
-  local endpoint=https://api.cloudflareclient.com/v0a2158
+  local endpoint=https://api.cloudflareclient.com/v0a1922
   local temp_file
   local error
   local command
   local headers=(
     "User-Agent: okhttp/3.12.1"
-    "CF-Client-Version: a-6.10-2158"
+    "CF-Client-Version: a-6.3-1922"
     "Content-Type: application/json"
   )
   temp_file=$(mktemp)
