@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -38,13 +38,13 @@ HEIGHT=30
 WIDTH=60
 CHOICE_HEIGHT=20
 
-image[xray]="teddysun/xray:1.8.4"
 image[sing-box]="gzxhwq/sing-box:1.8.14"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
 image[python]="python:3.11-alpine"
 image[wgcf]="virb3/wgcf:2.2.29"
+image[xray]="teddysun/xray:latest"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
@@ -103,12 +103,12 @@ regex[url]="^(http|https)://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[0-9]{1,3}(\.[0-9]{1,3
 
 function show_help {
   echo ""
-  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2|shadowtls] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
+  echo "Usage: reality-ezpz.sh [-t|--transport=tcp|http|grpc|ws|tuic|hysteria2|shadowtls|xhttp] [-d|--domain=<domain>] [--server=<server>] [--regenerate] [--default]
   [-r|--restart] [--enable-safenet=true|false] [--port=<port>] [-c|--core=xray|sing-box] [--enable-warp=true|false]
   [--warp-license=<license>] [--security=reality|letsencrypt|selfsigned] [-m|--menu] [--show-server-config] [--add-user=<username>] [--lists-users]
   [--show-user=<username>] [--delete-user=<username>] [--backup] [--restore=<url|file>] [--backup-password=<password>] [-u|--uninstall]"
   echo ""
-  echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2|shadowtls> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, shadowtls, default: ${defaults[transport]})"
+  echo "  -t, --transport <tcp|http|grpc|ws|tuic|hysteria2|shadowtls|xhttp> Transport protocol (tcp, http, grpc, ws, tuic, hysteria2, shadowtls, xhttp, default: ${defaults[transport]})"
   echo "  -d, --domain <domain>     Domain to use as SNI (default: ${defaults[domain]})"
   echo "      --server <server>     IP address or domain name of server (Must be a valid domain if using letsencrypt security)"
   echo "      --regenerate          Regenerate public and private keys"
@@ -149,7 +149,7 @@ function parse_args {
       -t|--transport)
         args[transport]="$2"
         case ${args[transport]} in
-          tcp|http|grpc|ws|tuic|hysteria2|shadowtls)
+          tcp|http|grpc|ws|tuic|hysteria2|shadowtls|xhttp)
             shift 2
             ;;
           *)
@@ -660,8 +660,9 @@ function update_users_file {
 function generate_keys {
   local key_pair
   key_pair=$(docker run --rm ${image[xray]} xray x25519)
-  config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
-  config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
+  config_file[private_key]=$(echo ${key_pair} | awk '{print $2}')
+  echo ${config_file[private_key]}
+  config_file[public_key]=$(echo ${key_pair} | awk '{print $4}')
   config_file[short_id]=$(openssl rand -hex 8)
   config_file[service_path]=$(openssl rand -hex 4)
 }
@@ -849,7 +850,7 @@ $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend default
 frontend tls
 $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
-  bind :::8443 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
+  bind :::8443 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h3,h2
   mode http
   http-request set-header Host ${config[server]}
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
@@ -1111,6 +1112,9 @@ function generate_engine_config {
       if [[ ${config[transport]} == shadowtls ]]; then
       echo '"version": 3, "strict_mode": false, "detour": "shadowsocks", "handshake": {"server": "'"${config[domain]%%:*}"'", "server_port": '"${reality_port}"'}'
       fi
+      if [[ ${config[transport]} == xhttp ]]; then
+      echo ',"transport": {"type": "xhttp", "xhttpSettings": { "mode": "packet-up", "path": "/" },"service_name": "'"${config[service_path]}"'"}'
+      fi
       )
     }
     $(if [[ ${config[transport]} == 'shadowtls' ]]; then
@@ -1126,7 +1130,7 @@ function generate_engine_config {
       "password": "'"${config[private_key]}"'",
       "users": ['"${users_object}"']
     }'
-    fi )
+    fi)
   ],
   "outbounds": [
     {
@@ -1451,7 +1455,7 @@ function print_client_configuration {
     client_config="${client_config}:${config[port]}"
     client_config="${client_config}?security=$([[ ${config[security]} == 'reality' ]] && echo reality || echo tls)"
     client_config="${client_config}&encryption=none"
-    client_config="${client_config}&alpn=$([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')"
+    client_config="${client_config}&alpn=$([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h3,h2')"
     client_config="${client_config}&headerType=none"
     client_config="${client_config}&fp=chrome"
     client_config="${client_config}&type=${config[transport]}"
@@ -1704,7 +1708,7 @@ $([[ ${config[transport]} == 'grpc' ]] && echo 'gRPC mode: gun' || true)
 $([[ ${config[transport]} == 'grpc' ]] && echo 'gRPC serviceName: '"${config[service_path]}" || true)
 TLS: $([[ ${config[security]} == 'reality' ]] && echo 'reality' || echo 'tls')
 SNI: ${config[domain]%%:*}
-ALPN: $([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')
+ALPN: $([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h3,h2')
 Fingerprint: chrome
 $([[ ${config[security]} == 'reality' ]] && echo "PublicKey: ${config[public_key]}" || true)
 $([[ ${config[security]} == 'reality' ]] && echo "ShortId: ${config[short_id]}" || true)
@@ -1958,6 +1962,7 @@ function config_transport_menu {
       "tuic" "$([[ "${config[transport]}" == 'tuic' ]] && echo 'on' || echo 'off')" \
       "hysteria2" "$([[ "${config[transport]}" == 'hysteria2' ]] && echo 'on' || echo 'off')" \
       "shadowtls" "$([[ "${config[transport]}" == 'shadowtls' ]] && echo 'on' || echo 'off')" \
+      "xhttp" "$([[ "${config[transport]}" == 'xhttp' ]] && echo 'on' || echo 'off')" \
       3>&1 1>&2 2>&3)
     if [[ $? -ne 0 ]]; then
       break
@@ -2657,3 +2662,4 @@ if [[ -n $username ]]; then
 fi
 echo "Command has been executed successfully!"
 exit 0
+
