@@ -602,15 +602,25 @@ function build_config {
       exit 1
     fi
   fi
-  if [[ (-n "${args[security]}" || -n "${args[transport]}") && ("${args[security]}" == 'reality' || "${args[transport]}" == 'shadowtls') && ("${config_file[security]}" != 'reality' && "${config_file[transport]}" != 'shadowtls') ]]; then
+
+  if [[ -n "${args[security]}" && "${args[security]}" == 'reality' && "${config_file[security]}" != 'reality' && "${config_file[transport]}" != 'shadowtls' ]]; then
     config[domain]="${defaults[domain]}"
   fi
-  if [[ (-n "${args[security]}" || -n "${args[transport]}") && ("${args[security]}" != 'reality' && "${args[transport]}" != 'shadowtls') && ("${config_file[security]}" == 'reality' || "${config_file[transport]}" == 'shadowtls') ]]; then
+  if [[ -n "${args[security]}" && "${args[security]}" != 'reality' && "${config_file[security]}" == 'reality' && "${config_file[transport]}" != 'shadowtls' ]]; then
     config[domain]="${config[server]}"
   fi
-  if [[ -n "${args[server]}" && ("${config[security]}" != 'reality' && "${config[transport]}" != 'shadowtls') ]]; then
+  
+  if [[ -n "${args[transport]}" && "${args[transport]}" == 'shadowtls' && "${config_file[transport]}" != 'shadowtls' && "${config_file[security]}" != 'reality' ]]; then
+    config[domain]="${defaults[domain]}"
+  fi
+  if [[ -n "${args[transport]}" && "${args[transport]}" != 'shadowtls' && "${config_file[transport]}" == 'shadowtls' && "${config_file[security]}" != 'reality' ]]; then
     config[domain]="${config[server]}"
   fi
+
+  if [[ -n "${args[server]}" && "${config[security]}" != 'reality' && "${config[transport]}" != 'shadowtls' ]]; then
+    config[domain]="${config[server]}"
+  fi
+
   if [[ -n "${args[warp]}" && "${args[warp]}" == 'OFF' && "${config_file[warp]}" == 'ON' ]]; then
     if [[ -n ${config[warp_id]} && -n ${config[warp_token]} ]]; then
       warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
@@ -1986,6 +1996,9 @@ function config_transport_menu {
       message_box 'Invalid Configuration' 'You cannot use "shadowtls" transport with "xray" core. Use other transports or change core to "sing-box"'
       continue
     fi
+    if [[ ${config[transport]} != 'shadowtls' && ${transport} == 'shadowtls' && ${config[security]} != 'reality' ]]; then
+      config[domain]="${defaults[domain]}"
+    fi
     config[transport]=$transport
     update_config_file
     break
@@ -2058,7 +2071,7 @@ function config_security_menu {
     if [[ ${security} != 'reality' && ${config[transport]} != 'shadowtls' ]]; then
       config[domain]="${config[server]}"
     fi
-    if [[ ${security} == 'reality' || ${config[transport]} == 'shadowtls' ]]; then
+    if [[ ${config[security]} != 'reality' && ${security} == 'reality' && ${config[transport]} != 'shadowtls' ]]; then
       config[domain]="${defaults[domain]}"
     fi
     config[security]="${security}"
