@@ -39,7 +39,7 @@ WIDTH=60
 CHOICE_HEIGHT=20
 
 image[xray]="teddysun/xray:1.8.4"
-image[sing-box]="gzxhwq/sing-box:1.8.14"
+image[sing-box]="gzxhwq/sing-box:1.12.14"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
@@ -1035,21 +1035,32 @@ function generate_engine_config {
       "key_path": "/etc/sing-box/server.key"
     }'
     if [[ ${config[warp]} == 'ON' ]]; then
-      warp_object='{
+      warp_endpoint='{
         "type": "wireguard",
         "tag": "warp",
-        "server": "engage.cloudflareclient.com",
-        "server_port": 2408,
-        "system_interface": false,
-        "local_address": [
+        "system": false,
+        "name": "wg0",
+        "mtu": 1280,
+        "address": [
           "'"${config[warp_interface_ipv4]}"'/32",
           "'"${config[warp_interface_ipv6]}"'/128"
         ],
         "private_key": "'"${config[warp_private_key]}"'",
-        "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
-        "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
-        "mtu": 1280
-      },'
+        "listen_port": 0,
+        "peers": [
+          {
+            "address": "engage.cloudflareclient.com",
+            "port": 2408,
+            "public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+            "allowed_ips": [
+              "0.0.0.0/0"
+            ],
+            "persistent_keepalive_interval": 30,
+            "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"'
+          }
+        ]
+      }'
+
     fi
     for user in "${!users[@]}"; do
       if [ -n "$users_object" ]; then
@@ -1073,7 +1084,7 @@ function generate_engine_config {
   },
   "dns": {
     "servers": [
-    $([[ ${config[safenet]} == ON ]] && echo '{"address": "tcp://1.1.1.3", "detour": "internet"},{"address": "tcp://1.0.0.3", "detour": "internet"}' || echo '{"address": "tcp://1.1.1.1", "detour": "internet"},{"address": "tcp://1.0.0.1", "detour": "internet"}')
+    $([[ ${config[safenet]} == ON ]] && echo '{"type": "tcp", "server": "1.1.1.3"}' || echo '{"type": "tcp", "server": "1.1.1.1"}')
     ],
     "strategy": "prefer_ipv4"
   },
@@ -1088,11 +1099,9 @@ function generate_engine_config {
     },
     {
       "type": "${type}",
+      "tag": "in",	
       "listen": "::",
       "listen_port": 8443,
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4",
       "users": [${users_object}],
       $(if [[ ${config[security]} == 'reality' && ${config[transport]} != 'shadowtls' ]]; then
         echo "${reality_object}"
@@ -1129,21 +1138,18 @@ function generate_engine_config {
       "tag": "shadowsocks",
       "listen": "127.0.0.1",
       "listen_port": 8444,
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4",
       "method": "chacha20-ietf-poly1305",
       "password": "'"${config[private_key]}"'",
       "users": ['"${users_object}"']
     }'
     fi )
   ],
+  $([[ ${config[warp]} == ON ]] && echo '"endpoints": ['"${warp_endpoint}"'],' || true)
   "outbounds": [
     {
       "type": "direct",
       "tag": "internet"
     },
-    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || true)
     {
       "type": "block",
       "tag": "block"
@@ -1190,6 +1196,28 @@ function generate_engine_config {
     ],
     "rules": [
       {
+        "inbound": "in",
+        "action": "resolve",
+        "strategy": "prefer_ipv4"
+      },
+      {
+        "inbound": "in",
+        "action": "sniff",
+        "timeout": "300ms"
+      },
+    $(if [[ ${config[transport]} == 'shadowtls' ]]; then
+    echo '{
+        "inbound": "shadowsocks",
+        "action": "resolve",
+        "strategy": "prefer_ipv4"
+      },
+      {
+        "inbound": "shadowsocks",
+        "action": "sniff",
+        "timeout": "300ms"
+      },'
+    fi )
+      {
         "rule_set": [
           "block",
           "geoip-private",
@@ -1197,7 +1225,7 @@ function generate_engine_config {
           $([[ ${config[safenet]} == ON ]] && echo ',"nsfw"' || true)
           $([[ ${config[warp]} == OFF ]] && echo ',"bypass"')
         ],
-        "outbound": "block"
+        "action": "reject"
       },
       {
         "network": "tcp",
@@ -1207,7 +1235,7 @@ function generate_engine_config {
           465,
           2525
         ],
-        "outbound": "block"
+        "action": "reject"
       }
     ]
   },
