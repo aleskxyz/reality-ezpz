@@ -669,9 +669,9 @@ function update_users_file {
 
 function generate_keys {
   local key_pair
-  key_pair=$(docker run --rm ${image[xray]} xray x25519)
-  config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
-  config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
+  key_pair=$(docker run --rm ${image[sing-box]} generate reality-keypair)
+  config_file[public_key]=$(echo "${key_pair}" | grep 'PublicKey' | awk '{print $2}')
+  config_file[private_key]=$(echo "${key_pair}" | grep 'PrivateKey' | awk '{print $2}')
   config_file[short_id]=$(openssl rand -hex 8)
   config_file[service_path]=$(openssl rand -hex 4)
 }
@@ -1035,7 +1035,7 @@ function generate_engine_config {
       "key_path": "/etc/sing-box/server.key"
     }'
     if [[ ${config[warp]} == 'ON' ]]; then
-      warp_endpoint='{
+      warp_object='{
         "type": "wireguard",
         "tag": "warp",
         "system": false,
@@ -1144,7 +1144,7 @@ function generate_engine_config {
     }'
     fi )
   ],
-  $([[ ${config[warp]} == ON ]] && echo '"endpoints": ['"${warp_endpoint}"'],' || true)
+  $([[ ${config[warp]} == ON ]] && echo '"endpoints": ['"${warp_object}"'],' || true)
   "outbounds": [
     {
       "type": "direct",
