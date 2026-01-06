@@ -38,7 +38,7 @@ HEIGHT=30
 WIDTH=60
 CHOICE_HEIGHT=20
 
-image[xray]="teddysun/xray:1.8.4"
+image[xray]="teddysun/xray:25.12.8"
 image[sing-box]="gzxhwq/sing-box:1.12.14"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
@@ -1321,10 +1321,11 @@ EOF
         "decryption": "none"
       },
       "streamSettings": {
+        $([[ ${config[transport]} == 'tcp' ]] && echo '"tcpSettings": {"header": {"type": "none"}},' || true)
         $([[ ${config[transport]} == 'grpc' ]] && echo '"grpcSettings": {"serviceName": "'"${config[service_path]}"'"},' || true)
         $([[ ${config[transport]} == 'ws' ]] && echo '"wsSettings": {"headers": {"Host": "'"${config[server]}"'"}, "path": "/'"${config[service_path]}"'"},' || true)
-        $([[ ${config[transport]} == 'http' ]] && echo '"httpSettings": {"host":["'"${config[server]}"'"], "path": "/'"${config[service_path]}"'"},' || true)
-        "network": "${config[transport]}",
+        $([[ ${config[transport]} == 'http' ]] && echo '"xhttpSettings": {"host":"'"${config[server]}"'", "path": "/'"${config[service_path]}"'"},' || true)
+        $([[ ${config[transport]} == 'http' ]] && echo '"network": "xhttp",' || echo '"network": "'"${config[transport]}"'",' )
         $(if [[ ${config[security]} == 'reality' ]]; then
           echo "${reality_object}"
         elif [[ ${config[transport]} == 'http' || ${config[transport]} == 'tcp' ]]; then
@@ -1492,7 +1493,7 @@ function print_client_configuration {
     client_config="${client_config}&alpn=$([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')"
     client_config="${client_config}&headerType=none"
     client_config="${client_config}&fp=chrome"
-    client_config="${client_config}&type=${config[transport]}"
+    client_config="${client_config}&type=$([[ ${config[core]} == 'xray' && ${config[transport]} == 'http' ]] && echo 'xhttp' || echo "${config[transport]}")"
     client_config="${client_config}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
     client_config="${client_config}&sni=${config[domain]%%:*}"
     client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&host=${config[server]}" || true)"
