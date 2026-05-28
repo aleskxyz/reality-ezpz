@@ -38,13 +38,13 @@ HEIGHT=30
 WIDTH=60
 CHOICE_HEIGHT=20
 
-image[xray]="teddysun/xray:1.8.4"
-image[sing-box]="gzxhwq/sing-box:1.8.14"
+image[xray]="teddysun/xray:25.12.8"
+image[sing-box]="gzxhwq/sing-box:1.12.14"
 image[nginx]="nginx:1.24.0"
 image[certbot]="certbot/certbot:v2.6.0"
 image[haproxy]="haproxy:2.8.0"
 image[python]="python:3.11-alpine"
-image[wgcf]="virb3/wgcf:2.2.18"
+image[wgcf]="virb3/wgcf:2.2.29"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
@@ -559,10 +559,6 @@ function build_config {
     echo 'To enable Telegram bot, you have to give the list of authorized Telegram admins username with --tgbot-admins option.'
     exit 1
   fi
-  if [[ ${config[warp]} == 'ON' && -z ${config[warp_license]} ]]; then
-    echo 'To enable WARP+, you have to give WARP+ license with --warp-license option.'
-    exit 1
-  fi
   if [[ ! ${config[server]} =~ ${regex[domain]} && ${config[security]} == 'letsencrypt' ]]; then
     echo 'You have to assign a domain to server with "--server <domain>" option if you want to use "letsencrypt" as TLS certifcate.'
     exit 1
@@ -606,15 +602,25 @@ function build_config {
       exit 1
     fi
   fi
-  if [[ (-n "${args[security]}" || -n "${args[transport]}") && ("${args[security]}" == 'reality' || "${args[transport]}" == 'shadowtls') && ("${config_file[security]}" != 'reality' && "${config_file[transport]}" != 'shadowtls') ]]; then
+
+  if [[ -n "${args[security]}" && "${args[security]}" == 'reality' && "${config_file[security]}" != 'reality' && "${config_file[transport]}" != 'shadowtls' ]]; then
     config[domain]="${defaults[domain]}"
   fi
-  if [[ (-n "${args[security]}" || -n "${args[transport]}") && ("${args[security]}" != 'reality' && "${args[transport]}" != 'shadowtls') && ("${config_file[security]}" == 'reality' || "${config_file[transport]}" == 'shadowtls') ]]; then
+  if [[ -n "${args[security]}" && "${args[security]}" != 'reality' && "${config_file[security]}" == 'reality' && "${config_file[transport]}" != 'shadowtls' ]]; then
     config[domain]="${config[server]}"
   fi
-  if [[ -n "${args[server]}" && ("${config[security]}" != 'reality' && "${config[transport]}" != 'shadowtls') ]]; then
+  
+  if [[ -n "${args[transport]}" && "${args[transport]}" == 'shadowtls' && "${config_file[transport]}" != 'shadowtls' && "${config_file[security]}" != 'reality' ]]; then
+    config[domain]="${defaults[domain]}"
+  fi
+  if [[ -n "${args[transport]}" && "${args[transport]}" != 'shadowtls' && "${config_file[transport]}" == 'shadowtls' && "${config_file[security]}" != 'reality' ]]; then
     config[domain]="${config[server]}"
   fi
+
+  if [[ -n "${args[server]}" && "${config[security]}" != 'reality' && "${config[transport]}" != 'shadowtls' ]]; then
+    config[domain]="${config[server]}"
+  fi
+
   if [[ -n "${args[warp]}" && "${args[warp]}" == 'OFF' && "${config_file[warp]}" == 'ON' ]]; then
     if [[ -n ${config[warp_id]} && -n ${config[warp_token]} ]]; then
       warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
@@ -629,15 +635,13 @@ function build_config {
                                          -z ${config[warp_interface_ipv6]} ) ]]; }; then
     config[warp]='OFF'
     warp_create_account || exit 1
-    warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${config[warp_license]}" || exit 1
     config[warp]='ON'
   fi
-  if [[ -n ${args[warp_license]} && -n ${config_file[warp_license]} && "${args[warp_license]}" != "${config_file[warp_license]}" ]]; then
+  if [[ -n "${args[warp_license]}" && ( -z "${config_file[warp_license]}" || "${args[warp_license]}" != "${config_file[warp_license]}" ) ]]; then
     if ! warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${args[warp_license]}"; then
-      config[warp]='OFF'
       config[warp_license]=""
-      warp_delete_account "${config[warp_id]}" "${config[warp_token]}"
-      echo "WARP has been disabled due to the license error."
+      echo "WARP+ license error! Please check your license and try again."
+      exit 1
     fi 
   fi
 }
@@ -665,9 +669,9 @@ function update_users_file {
 
 function generate_keys {
   local key_pair
-  key_pair=$(docker run --rm ${image[xray]} xray x25519)
-  config_file[public_key]=$(echo "${key_pair}" | grep 'Public key:' | awk '{print $3}')
-  config_file[private_key]=$(echo "${key_pair}" | grep 'Private key:' | awk '{print $3}')
+  key_pair=$(docker run --rm ${image[sing-box]} generate reality-keypair)
+  config_file[public_key]=$(echo "${key_pair}" | grep 'PublicKey' | awk '{print $2}')
+  config_file[private_key]=$(echo "${key_pair}" | grep 'PrivateKey' | awk '{print $2}')
   config_file[short_id]=$(openssl rand -hex 8)
   config_file[service_path]=$(openssl rand -hex 4)
 }
@@ -1034,18 +1038,29 @@ function generate_engine_config {
       warp_object='{
         "type": "wireguard",
         "tag": "warp",
-        "server": "engage.cloudflareclient.com",
-        "server_port": 2408,
-        "system_interface": false,
-        "local_address": [
+        "system": false,
+        "name": "wg0",
+        "mtu": 1280,
+        "address": [
           "'"${config[warp_interface_ipv4]}"'/32",
           "'"${config[warp_interface_ipv6]}"'/128"
         ],
         "private_key": "'"${config[warp_private_key]}"'",
-        "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
-        "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
-        "mtu": 1280
-      },'
+        "listen_port": 0,
+        "peers": [
+          {
+            "address": "engage.cloudflareclient.com",
+            "port": 2408,
+            "public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+            "allowed_ips": [
+              "0.0.0.0/0"
+            ],
+            "persistent_keepalive_interval": 30,
+            "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"'
+          }
+        ]
+      }'
+
     fi
     for user in "${!users[@]}"; do
       if [ -n "$users_object" ]; then
@@ -1069,7 +1084,7 @@ function generate_engine_config {
   },
   "dns": {
     "servers": [
-    $([[ ${config[safenet]} == ON ]] && echo '{"address": "tcp://1.1.1.3", "detour": "internet"},{"address": "tcp://1.0.0.3", "detour": "internet"}' || echo '{"address": "tcp://1.1.1.1", "detour": "internet"},{"address": "tcp://1.0.0.1", "detour": "internet"}')
+    $([[ ${config[safenet]} == ON ]] && echo '{"type": "tcp", "server": "1.1.1.3"}' || echo '{"type": "tcp", "server": "1.1.1.1"}')
     ],
     "strategy": "prefer_ipv4"
   },
@@ -1084,11 +1099,9 @@ function generate_engine_config {
     },
     {
       "type": "${type}",
+      "tag": "in",	
       "listen": "::",
       "listen_port": 8443,
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4",
       "users": [${users_object}],
       $(if [[ ${config[security]} == 'reality' && ${config[transport]} != 'shadowtls' ]]; then
         echo "${reality_object}"
@@ -1125,21 +1138,18 @@ function generate_engine_config {
       "tag": "shadowsocks",
       "listen": "127.0.0.1",
       "listen_port": 8444,
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4",
       "method": "chacha20-ietf-poly1305",
       "password": "'"${config[private_key]}"'",
       "users": ['"${users_object}"']
     }'
     fi )
   ],
+  $([[ ${config[warp]} == ON ]] && echo '"endpoints": ['"${warp_object}"'],' || true)
   "outbounds": [
     {
       "type": "direct",
       "tag": "internet"
     },
-    $([[ ${config[warp]} == ON ]] && echo "${warp_object}" || true)
     {
       "type": "block",
       "tag": "block"
@@ -1152,39 +1162,61 @@ function generate_engine_config {
         "tag": "block",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/block.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/block.srs",
         "download_detour": "internet"
       },
       {
         "tag": "nsfw",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-nsfw.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/geosite-nsfw.srs",
         "download_detour": "internet"
       },
       {
         "tag": "geoip-private",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geoip-private.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/geoip-private.srs",
         "download_detour": "internet"
       },
       {
         "tag": "geosite-private",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/geosite-private.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/geosite-private.srs",
         "download_detour": "internet"
       },
       {
         "tag": "bypass",
         "type": "remote",
         "format": "binary",
-        "url": "https://cdn.jsdelivr.net/gh/aleskxyz/sing-box-rules@rule-set/bypass.srs",
+        "url": "https://raw.githubusercontent.com/aleskxyz/sing-box-rules/refs/heads/rule-set/bypass.srs",
         "download_detour": "internet"
       }
     ],
     "rules": [
+      {
+        "inbound": "in",
+        "action": "resolve",
+        "strategy": "prefer_ipv4"
+      },
+      {
+        "inbound": "in",
+        "action": "sniff",
+        "timeout": "300ms"
+      },
+    $(if [[ ${config[transport]} == 'shadowtls' ]]; then
+    echo '{
+        "inbound": "shadowsocks",
+        "action": "resolve",
+        "strategy": "prefer_ipv4"
+      },
+      {
+        "inbound": "shadowsocks",
+        "action": "sniff",
+        "timeout": "300ms"
+      },'
+    fi )
       {
         "rule_set": [
           "block",
@@ -1193,7 +1225,7 @@ function generate_engine_config {
           $([[ ${config[safenet]} == ON ]] && echo ',"nsfw"' || true)
           $([[ ${config[warp]} == OFF ]] && echo ',"bypass"')
         ],
-        "outbound": "block"
+        "action": "reject"
       },
       {
         "network": "tcp",
@@ -1203,7 +1235,7 @@ function generate_engine_config {
           465,
           2525
         ],
-        "outbound": "block"
+        "action": "reject"
       }
     ]
   },
@@ -1289,10 +1321,11 @@ EOF
         "decryption": "none"
       },
       "streamSettings": {
+        $([[ ${config[transport]} == 'tcp' ]] && echo '"tcpSettings": {"header": {"type": "none"}},' || true)
         $([[ ${config[transport]} == 'grpc' ]] && echo '"grpcSettings": {"serviceName": "'"${config[service_path]}"'"},' || true)
         $([[ ${config[transport]} == 'ws' ]] && echo '"wsSettings": {"headers": {"Host": "'"${config[server]}"'"}, "path": "/'"${config[service_path]}"'"},' || true)
-        $([[ ${config[transport]} == 'http' ]] && echo '"httpSettings": {"host":["'"${config[server]}"'"], "path": "/'"${config[service_path]}"'"},' || true)
-        "network": "${config[transport]}",
+        $([[ ${config[transport]} == 'http' ]] && echo '"xhttpSettings": {"host":"'"${config[server]}"'", "path": "/'"${config[service_path]}"'"},' || true)
+        $([[ ${config[transport]} == 'http' ]] && echo '"network": "xhttp",' || echo '"network": "'"${config[transport]}"'",' )
         $(if [[ ${config[security]} == 'reality' ]]; then
           echo "${reality_object}"
         elif [[ ${config[transport]} == 'http' || ${config[transport]} == 'tcp' ]]; then
@@ -1460,7 +1493,7 @@ function print_client_configuration {
     client_config="${client_config}&alpn=$([[ ${config[transport]} == 'ws' ]] && echo 'http/1.1' || echo 'h2,http/1.1')"
     client_config="${client_config}&headerType=none"
     client_config="${client_config}&fp=chrome"
-    client_config="${client_config}&type=${config[transport]}"
+    client_config="${client_config}&type=$([[ ${config[core]} == 'xray' && ${config[transport]} == 'http' ]] && echo 'xhttp' || echo "${config[transport]}")"
     client_config="${client_config}&flow=$([[ ${config[transport]} == 'tcp' ]] && echo 'xtls-rprx-vision' || true)"
     client_config="${client_config}&sni=${config[domain]%%:*}"
     client_config="${client_config}$([[ ${config[transport]} == 'ws' || ${config[transport]} == 'http' ]] && echo "&host=${config[server]}" || true)"
@@ -1992,6 +2025,9 @@ function config_transport_menu {
       message_box 'Invalid Configuration' 'You cannot use "shadowtls" transport with "xray" core. Use other transports or change core to "sing-box"'
       continue
     fi
+    if [[ ${config[transport]} != 'shadowtls' && ${transport} == 'shadowtls' && ${config[security]} != 'reality' ]]; then
+      config[domain]="${defaults[domain]}"
+    fi
     config[transport]=$transport
     update_config_file
     break
@@ -2064,7 +2100,7 @@ function config_security_menu {
     if [[ ${security} != 'reality' && ${config[transport]} != 'shadowtls' ]]; then
       config[domain]="${config[server]}"
     fi
-    if [[ ${security} == 'reality' || ${config[transport]} == 'shadowtls' ]]; then
+    if [[ ${config[security]} != 'reality' && ${security} == 'reality' && ${config[transport]} != 'shadowtls' ]]; then
       config[domain]="${defaults[domain]}"
     fi
     config[security]="${security}"
@@ -2153,24 +2189,27 @@ function config_warp_menu {
     config[warp]=ON
     while true; do
       warp_license=$(whiptail --clear --backtitle "$BACKTITLE" --title "WARP+ License" \
-        --inputbox "Enter WARP+ License:" $HEIGHT $WIDTH "${config[warp_license]}" \
+        --inputbox "Enter WARP+ License:\nLeave blank if you only want to use free WARP account" $HEIGHT $WIDTH "${config[warp_license]}" \
         3>&1 1>&2 2>&3)
       if [[ $? -ne 0 ]]; then
         break
       fi
-      if [[ ! $warp_license =~ ${regex[warp_license]} ]]; then
+      if [[ -n "${warp_license}" && ! $warp_license =~ ${regex[warp_license]} ]]; then
         message_box "Invalid Input" "Invalid WARP+ License"
         continue
       fi
-      temp_file=$(mktemp)
-      warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${warp_license}" > "${temp_file}"
-      exit_code=$?
-      error=$(< "${temp_file}")
-      rm -f "${temp_file}"
-      if [[ ${exit_code} -ne 0 ]]; then
-        message_box "WARP license error" "${error}"
-        continue
+      if [[ -n "${warp_license}" ]]; then
+        temp_file=$(mktemp)
+        warp_add_license "${config[warp_id]}" "${config[warp_token]}" "${warp_license}" > "${temp_file}"
+        exit_code=$?
+        error=$(< "${temp_file}")
+        rm -f "${temp_file}"
+        if [[ ${exit_code} -ne 0 ]]; then
+          message_box "WARP license error" "${error}"
+          continue
+        fi
       fi
+      update_config_file
       return
     done
   done
@@ -2338,13 +2377,13 @@ function warp_api {
   local data=$3
   local token=$4
   local team_token=$5
-  local endpoint=https://api.cloudflareclient.com/v0a2158
+  local endpoint=https://api.cloudflareclient.com/v0a1922
   local temp_file
   local error
   local command
   local headers=(
     "User-Agent: okhttp/3.12.1"
-    "CF-Client-Version: a-6.10-2158"
+    "CF-Client-Version: a-6.3-1922"
     "Content-Type: application/json"
   )
   temp_file=$(mktemp)
