@@ -859,7 +859,7 @@ $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend default
 frontend tls
 $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
-  bind :::8443 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
+  bind :::8443 v4v6 strict-sni ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
   mode http
   http-request set-header Host ${config[server]}
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
